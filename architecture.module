@@ -165,6 +165,8 @@ function architecture_entity_types($requested_types=NULL) {
             $entity_types[$type]['bundles'][$bundle_name]['fields'][$name] = array(
               'label' => $particulars['label'],
               'type' => $particulars['widget']['type'],
+              'description' => $particulars['description'],
+              'required' => $particulars['required'],
             );
           }
         }
@@ -214,8 +216,11 @@ function theme_architecture_entity_types($entity_types=array()) {
 function theme_architecture_fields($fields=array(), $entity_type='', $bundle='') {
   if ($fields) {
     $items = array();
-    foreach (array_values($fields) as $field) {
-      $items[] = $field['label'] . ' <i>(' . $field['type'] . ')</i>';
+    foreach ($fields as $machine_name => $field) {
+      $items[] = $field['label'] . 
+        ($field['required'] ? '<span class="form-required" title="This field is required.">*</span>' : '') .
+        ' <i>(' . $machine_name . '):</i> ' . $field['type'] . 
+        ($field['description'] ? '<br /><i>Help text:</i> ' . $field['description'] : '');
     }
     return theme('item_list', array(
       'items' => $items,
