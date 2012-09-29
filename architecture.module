@@ -217,7 +217,7 @@ function theme_architecture_fields($fields=array(), $entity_type='', $bundle='')
   if ($fields) {
     $items = array();
     foreach ($fields as $machine_name => $field) {
-      $items[] = $field['label'] . 
+      $items[] = '<b>' . $field['label'] . '</b>' .
         ($field['required'] ? '<span class="form-required" title="This field is required.">*</span>' : '') .
         ' <i>(' . $machine_name . '):</i> ' . $field['type'] . 
         ($field['description'] ? '<br /><i>Help text:</i> ' . $field['description'] : '');
