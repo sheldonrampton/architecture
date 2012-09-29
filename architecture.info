@@ -1,0 +1,8 @@
+name = Architecture
+description = "Produces an architectural overview of your Drupal website"
+core = 7.x
+files[] = architecture.module
+version = "7.x-1.x-dev"
+core = "7.x"
+datestamp = "1323823902"
+

@@ -1,0 +1,243 @@
+<?php
+/**
+ * @file
+ * This is the file description for Untitled 2 module.
+ *
+ * In this more verbose, multi-line description, you can specify what this
+ * file does exactly. Make sure to wrap your documentation in column 78 so
+ * that the file can be displayed nicely in default-sized consoles.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function architecture_menu() {
+  $items = array();
+  $items['admin/reports/architecture/entities'] = array(
+    'title' => 'Site Entities',
+    'description' => 'Displays entities that are defined for this Drupal website.',
+    'page callback' => 'architecture_entities_page',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/reports/architecture/taxonomies'] = array(
+    'title' => 'Site Taxonomies',
+    'description' => 'Displays taxonomies that are defined for this Drupal website.',
+    'page callback' => 'architecture_taxonomies_page',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+
+/**
+ * Returns the site entities page.
+ */
+function architecture_entities_page() {
+  return theme('architecture_entity_types', architecture_entity_types());
+}
+
+/**
+ * Returns the site entities page.
+ */
+function architecture_taxonomies_page() {
+  return theme('architecture_taxonomies', architecture_taxonomies());
+}
+
+/**
+ * Implements hook_theme().
+ */
+function architecture_theme() {
+  return array(
+    'architecture_content_types' => array(
+    ),
+    'architecture_entity_types' => array(
+    ),
+    'architecture_fields' => array(
+    ),
+    'architecture_taxonomies' => array(
+    ),
+  );
+}
+
+function architecture_taxonomies($requested_taxonomies=NULL) {
+  $vocabularies = taxonomy_get_vocabularies();
+  $vocabs = array();
+  foreach ($vocabularies as $vocab => $details) {
+    $vocabs[$vocab] = array(
+      'name' => $details->name,
+      'machine_name' => $details->machine_name,
+      'description' => $details->description,
+      'terms' => array(),
+    );
+    $terms = taxonomy_get_tree($vocab);
+    foreach($terms as $term){
+      $vocabs[$vocab]['terms'][]= $term->name;
+    }
+  }
+  return $vocabs;
+}
+
+function theme_architecture_taxonomies($vocabularies=array()) {
+  $output = '';
+  foreach ($vocabularies as $vocab => $details) {
+    $output .= '<h1 class="architecture-entity">' . $details['name'] . '</h1>';
+    $output .= "<p><b>Machine name: </b>" . $details['machine_name'] . '</p>';
+    if ($details['description']) {
+      $output .= '<p>' . $details['description'] . '</p>';
+    }
+    $output .= theme('item_list', array(
+      'items' => $details['terms'],
+      'title' => 'Terms',
+      'type' => 'ul',
+      'attributes' => array('class' => array('architecture-fields', 'architecture-vocabulary-term' . '-' . $details['machine_name'])),
+    ));
+  }
+  return $output;
+}
+
+/**
+* Returns an array of content types
+*
+* @param $requested_types
+*   A simple array of content types to be returned.
+*/
+function architecture_content_types($requested_types=NULL) {
+  $types = _node_types_build()->types;
+  $content_types = array();
+  foreach ($types as $type => $details) {
+    if (!is_array($requested_types) || in_array($type, $requested_types)) {
+      $content_types[$type] = array(
+        'name' => $details->name,
+        'description' => $details->description,
+        'fields' => array(),
+      );
+      $fields = field_info_instances('node', $type);
+      foreach ($fields as $name => $particulars) {
+        $content_types[$type]['fields'][$name] = $particulars['label'];
+      }
+    }
+  }
+  return $content_types;
+}
+
+/**
+* Returns an array of entity types
+*
+* @param $requested_types
+*   A simple array of entity types to be returned.
+*/
+function architecture_entity_types($requested_types=NULL) {
+  $types = entity_get_info();
+  $content_types = _node_types_build()->types;
+  $entity_types = array();
+  foreach ($types as $type => $details) {
+    if (!is_array($requested_types) || in_array($type, $requested_types)) {
+      $entity_types[$type] = array(
+        'label' => $details['label'],
+        'description' => $details['description'],
+        'fieldable' => $details['fieldable'],
+        'bundles' => array(),
+      );
+      foreach ($details['bundles'] as $bundle_name => $bundle_details) {
+        $entity_types[$type]['bundles'][$bundle_name] = array(
+          'label' => $bundle_details['label'],
+          'description' => $bundle_details['description'],
+        );
+        if ($type == 'node') {
+          $entity_types[$type]['bundles'][$bundle_name]['description'] = $content_types[$bundle_name]->description;
+        }
+        if ($details['fieldable']) {
+          $fields = field_info_instances($type, $bundle_name);
+          $entity_types[$type]['bundles'][$bundle_name]['fields'] = array();
+          foreach ($fields as $name => $particulars) {
+            $entity_types[$type]['bundles'][$bundle_name]['fields'][$name] = array(
+              'label' => $particulars['label'],
+              'type' => $particulars['widget']['type'],
+            );
+          }
+        }
+      }
+    }
+  }
+  return $entity_types;
+}
+
+/**
+* Turns an array of entity types into formatted HTML.
+*
+* @param $entity_types
+*   An array of entity types.
+*/
+function theme_architecture_entity_types($entity_types=array()) {
+  $output = '';
+  foreach ($entity_types as $type => $details) {
+    $output .= '<h1 class="architecture-entity">' . $details['label'] . ' entities</h1>';
+    if ($details['description']) {
+      $output .= '<p>' . $details['description'] . '</p>';
+    }
+    foreach ($details['bundles'] as $bundle_name => $bundle_details) {
+      $output .= '<h2 class="architecture-bundle">' . $bundle_details['label'] . '</h2>';
+      $output .= "<p><b>Machine name: </b>" . $bundle_name . '</p>';
+      if ($bundle_details['description']) {
+        $output .= "<p>" . $bundle_details['description'] . '</p>';
+      }
+      if ($details['fieldable']) {
+        $output .= theme('architecture_fields', $bundle_details['fields'], $type, $bundle_name);
+      }
+    }
+  }
+  return $output;
+}
+
+/**
+* Turns an array of fields into a formatted HTML list.
+*
+* @param $fields
+*   An array of fields.
+* @param $entity_type
+*   The machine name of the entity type.
+* @param $bundle
+*   The machine name of the bundle.
+*/
+function theme_architecture_fields($fields=array(), $entity_type='', $bundle='') {
+  if ($fields) {
+    $items = array();
+    foreach (array_values($fields) as $field) {
+      $items[] = $field['label'] . ' <i>(' . $field['type'] . ')</i>';
+    }
+    return theme('item_list', array(
+      'items' => $items,
+      'title' => 'Fields',
+      'type' => 'ul',
+      'attributes' => array('class' => array('architecture-fields', 'architecture-' . $entity_type . '-' . $type)),
+    ));
+  }
+}
+
+/**
+* Turns an array of content types into formatted HTML.
+*
+* @param $content_types
+*   An array of content_types.
+*/
+function theme_architecture_content_types($content_types=array()) {
+  $items = array();
+  foreach ($content_types as $type => $details) {
+    $item = '<b>' . $details['name'] . ' (' . $type . '):</b> ' . $details['description'];
+    if ($details['fields']) {
+      $item .= theme('item_list', array(
+        'items' => array_values($details['fields']),
+        'title' => 'Fields',
+        'type' => 'ul',
+        'attributes' => array('class' => array('architecture-fields', 'architecture-content-type-' . $type)),
+      ));
+    }
+    $items[] = $item;
+  }
+  return theme('item_list', array(
+    'items' => $items,
+    'type' => 'ul',
+    'attributes' => array('class' => 'architecture-content-types'),
+  ));
+}
