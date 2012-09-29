@@ -27,6 +27,13 @@ function architecture_menu() {
     'access arguments' => array('administer site configuration'),
     'type' => MENU_NORMAL_ITEM,
   );
+  $items['admin/reports/architecture/variables'] = array(
+    'title' => 'Site Variables',
+    'description' => 'Displays variables that are defined for this Drupal website.',
+    'page callback' => 'architecture_variables_page',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
   return $items;
 }
 
@@ -45,18 +52,22 @@ function architecture_taxonomies_page() {
 }
 
 /**
+ * Returns the site entities page.
+ */
+function architecture_variables_page() {
+  return theme('architecture_variables', architecture_variables());
+}
+
+/**
  * Implements hook_theme().
  */
 function architecture_theme() {
   return array(
-    'architecture_content_types' => array(
-    ),
-    'architecture_entity_types' => array(
-    ),
-    'architecture_fields' => array(
-    ),
-    'architecture_taxonomies' => array(
-    ),
+    'architecture_content_types' => array(),
+    'architecture_entity_types' => array(),
+    'architecture_fields' => array(),
+    'architecture_taxonomies' => array(),
+    'architecture_variables' => array(),
   );
 }
 
@@ -241,3 +252,24 @@ function theme_architecture_content_types($content_types=array()) {
     'attributes' => array('class' => 'architecture-content-types'),
   ));
 }
+
+/**
+ * Command callback.
+ * List your site's variables.
+ */
+function architecture_variables($requested_variables=NULL) {
+  global $conf;
+  $keys = array_keys($conf);
+  return $keys;
+}
+
+function theme_architecture_variables($keys=array()) {
+  global $conf;
+  $output = '';
+  foreach ($keys as $name) {
+    $output .= '<h2 class="architecture-bundle">' . $name . '</h1>';
+    $output .= '<pre>' . print_r($conf[$name], TRUE) . '</pre>';
+  }
+  return $output;
+}
+
