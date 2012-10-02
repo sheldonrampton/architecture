@@ -162,11 +162,15 @@ function architecture_entity_types($requested_types=NULL) {
           $fields = field_info_instances($type, $bundle_name);
           $entity_types[$type]['bundles'][$bundle_name]['fields'] = array();
           foreach ($fields as $name => $particulars) {
+            $field_info = field_info_field($name);
+            $widget_type = field_info_widget_types($particulars['widget']['type']);
             $entity_types[$type]['bundles'][$bundle_name]['fields'][$name] = array(
               'label' => $particulars['label'],
-              'type' => $particulars['widget']['type'],
+              'type' => $field_info['type'],
               'description' => $particulars['description'],
               'required' => $particulars['required'],
+              'widget_type' => $particulars['widget']['type'],
+              'widget_label' => $widget_type['label'],
             );
           }
         }
@@ -220,6 +224,7 @@ function theme_architecture_fields($fields=array(), $entity_type='', $bundle='')
       $items[] = '<b>' . $field['label'] . '</b>' .
         ($field['required'] ? '<span class="form-required" title="This field is required.">*</span>' : '') .
         ' <i>(' . $machine_name . '):</i> ' . $field['type'] . 
+        "<br /> Widget: " . $field['widget_label'] . ' <i>(' . $field['widget_type'] . ')</i>' .
         ($field['description'] ? '<br /><i>Help text:</i> ' . $field['description'] : '');
     }
     return theme('item_list', array(
