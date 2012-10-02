@@ -20,13 +20,15 @@ function architecture_menu() {
     'access arguments' => array('administer site configuration'),
     'type' => MENU_NORMAL_ITEM,
   );
-  $items['admin/reports/architecture/taxonomies'] = array(
-    'title' => 'Site Taxonomies',
-    'description' => 'Displays taxonomies that are defined for this Drupal website.',
-    'page callback' => 'architecture_taxonomies_page',
-    'access arguments' => array('administer site configuration'),
-    'type' => MENU_NORMAL_ITEM,
-  );
+  if (module_exists('taxonomy')) {
+    $items['admin/reports/architecture/taxonomies'] = array(
+      'title' => 'Site Taxonomies',
+      'description' => 'Displays taxonomies that are defined for this Drupal website.',
+      'page callback' => 'architecture_taxonomies_page',
+      'access arguments' => array('administer site configuration'),
+      'type' => MENU_NORMAL_ITEM,
+    );
+  }
   $items['admin/reports/architecture/variables'] = array(
     'title' => 'Site Variables',
     'description' => 'Displays variables that are defined for this Drupal website.',
