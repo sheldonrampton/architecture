@@ -1,32 +1,126 @@
 <?php
 /**
  * @file
- * This is the file description for Untitled 2 module.
+ * Provides reports about a Drupal site's data architecture.
  *
- * In this more verbose, multi-line description, you can specify what this
- * file does exactly. Make sure to wrap your documentation in column 78 so
- * that the file can be displayed nicely in default-sized consoles.
+ * The Architecture module provides reports documenting how a Drupal site is
+ * architected. It provides reports on:
+ *   Content types and fields
+ *   Site taxonomies
+ *   Site variables
+ * In addition to HTML reports, it exports data as CSV files. Ultimately this
+ * module is intended to provide an automatic export for all of the information
+ * components listed in Palantir's Build Spec spreadsheet, as described here:
+ * 
+ * http://www.palantir.net/blog/developing-drupal-sites-plan-or-perish
+ * https://docs.google.com/a/nuams.co/spreadsheet/ccc?key=0AuIiRK97zQSYdG1EUXNxdDhtVlZBang1N3o1b19IRWc#gid=0
+ * 
+ * as well as the information components currently available from the 
+ * sitedoc module:
+ * 
+ * https://drupal.org/project/sitedoc
  */
+
+/*
+// Comment constand definitions.
+define('COMMENT_NODE_HIDDEN', 0);
+define('COMMENT_NODE_CLOSED', 1);
+define('COMMENT_NODE_OPEN', 2);
+// */
 
 /**
  * Implements hook_menu().
  */
 function architecture_menu() {
   $items = array();
-  $items['admin/reports/architecture/entities'] = array(
-    'title' => 'Site Entities',
-    'description' => 'Displays entities that are defined for this Drupal website.',
-    'page callback' => 'architecture_entities_page',
+  $items['admin/reports/architecture'] = array(
+    'title' => 'Site Architecture',
+    'description' => 'Displays website architecture.',
+    'page callback' => 'architecture_page',
     'access arguments' => array('administer site configuration'),
-    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/reports/architecture/list'] = array(
+    'title' => 'CSV Downloads',
+    'description' => 'Available CSV downloads of site architecture.',
+    'page callback' => 'architecture_page',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -1,
+  );
+  $items['admin/reports/architecture/content_types'] = array(
+    'title' => 'Content Types',
+    'description' => 'Displays content types that are defined for this Drupal website.',
+    'page callback' => 'architecture_content_types_page',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/reports/architecture/content_types_csv'] = array(
+    'title' => 'Content Types CSV',
+    'description' => 'CSV export of content types information',
+    'page callback' => 'architecture_content_types_csv',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/reports/architecture/content_fields_csv'] = array(
+    'title' => 'Content Types/Fields CSV',
+    'description' => 'CSV export of content type/fields information',
+    'page callback' => 'architecture_content_types_fields_csv',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/reports/architecture/user_roles_csv'] = array(
+    'title' => 'User Roles CSV',
+    'description' => 'CSV export of user role information',
+    'page callback' => 'architecture_user_roles_csv',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/reports/architecture/menus_csv'] = array(
+    'title' => 'Menus CSV',
+    'description' => 'CSV export of menu information',
+    'page callback' => 'architecture_menus_csv',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/reports/architecture/image_styles_csv'] = array(
+    'title' => 'Image styles CSV',
+    'description' => 'CSV export of image style information',
+    'page callback' => 'architecture_image_styles_csv',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
   );
   if (module_exists('taxonomy')) {
+    $items['admin/reports/architecture/taxonomies_csv'] = array(
+      'title' => 'Taxonomies CSV',
+      'description' => 'CSV export of taxonomies information',
+      'page callback' => 'architecture_taxonomies_csv',
+      'access arguments' => array('administer site configuration'),
+      'type' => MENU_CALLBACK,
+    );
     $items['admin/reports/architecture/taxonomies'] = array(
       'title' => 'Site Taxonomies',
       'description' => 'Displays taxonomies that are defined for this Drupal website.',
       'page callback' => 'architecture_taxonomies_page',
       'access arguments' => array('administer site configuration'),
-      'type' => MENU_NORMAL_ITEM,
+      'type' => MENU_LOCAL_TASK,
+    );
+  }
+  if (module_exists('nodequeue')) {
+    $items['admin/reports/architecture/nodequeues_csv'] = array(
+      'title' => 'Nodequeues CSV',
+      'description' => 'CSV export of nodequeue information',
+      'page callback' => 'architecture_nodequeues_csv',
+      'access arguments' => array('administer site configuration'),
+      'type' => MENU_CALLBACK,
+    );
+  }
+  if (module_exists('views')) {
+    $items['admin/reports/architecture/views_csv'] = array(
+      'title' => 'Views CSV',
+      'description' => 'Displays views that are defined for this Drupal website.',
+      'page callback' => 'architecture_views_csv',
+      'access arguments' => array('administer site configuration'),
+      'type' => MENU_CALLBACK,
     );
   }
   $items['admin/reports/architecture/variables'] = array(
@@ -34,27 +128,50 @@ function architecture_menu() {
     'description' => 'Displays variables that are defined for this Drupal website.',
     'page callback' => 'architecture_variables_page',
     'access arguments' => array('administer site configuration'),
-    'type' => MENU_NORMAL_ITEM,
+    'type' => MENU_LOCAL_TASK,
   );
   return $items;
 }
 
 /**
- * Returns the site entities page.
+ * Returns the site architecture page.
  */
-function architecture_entities_page() {
-  return theme('architecture_entity_types', architecture_entity_types());
+function architecture_page() {
+  $download_list = array(
+    l(t('Content Types CSV'), 'admin/reports/architecture/content_types_csv'),
+    l(t('Content Types/Fields CSV'), 'admin/reports/architecture/content_fields_csv'),
+  );
+  if (module_exists('nodequeue')) {
+    $download_list[] = l(t('Nodequeues CSV'), 'admin/reports/architecture/nodequeues_csv');
+  }
+  $download_list[] = l(t('Image styles CSV'), 'admin/reports/architecture/image_styles_csv');
+  $download_list[] = l(t('Menus CSV'), 'admin/reports/architecture/menus_csv');
+  if (module_exists('taxonomy')) {
+    $download_list[] = l(t('Vocabularies CSV'), 'admin/reports/architecture/taxonomies_csv');
+  }
+  if (module_exists('views')) {
+    $download_list[] = l(t('Views CSV'), 'admin/reports/architecture/views_csv');
+  }
+  $download_list[] = l(t('User Roles CSV'), 'admin/reports/architecture/user_roles_csv');
+  return theme('item_list', $download_list, 'CSV Downloads');
 }
 
 /**
- * Returns the site entities page.
+ * Returns the site content types page.
+ */
+function architecture_content_types_page() {
+  return theme('architecture_content_types', architecture_content_types());
+}
+
+/**
+ * Returns the site taxonomies page.
  */
 function architecture_taxonomies_page() {
   return theme('architecture_taxonomies', architecture_taxonomies());
 }
 
 /**
- * Returns the site entities page.
+ * Returns the site variables page.
  */
 function architecture_variables_page() {
   return theme('architecture_variables', architecture_variables());
@@ -66,68 +183,648 @@ function architecture_variables_page() {
 function architecture_theme() {
   return array(
     'architecture_content_types' => array(),
-    'architecture_entity_types' => array(),
+    'architecture_content_types_fields' => array(),
     'architecture_fields' => array(),
     'architecture_taxonomies' => array(),
     'architecture_variables' => array(),
   );
 }
 
+/**
+ * Generates a CSV file of content type information.
+ *
+ * @param Array $requested_types
+ *   A list of content types to be returned.
+ */
+function architecture_content_types_csv($requested_types=NULL) {
+  // TODO: Include pathauto information.
+  $content_types = architecture_content_types($requested_types, TRUE);
+  architecture_csv_page('content_types', $content_types);
+}
+
+/**
+ * Generates a CSV file of user role information.
+ *
+ * @param Array $requested_types
+ *   A list of user roles to be returned.
+ */
+function architecture_user_roles_csv($requested_roles=NULL) {
+  $roles = architecture_user_roles($requested_roles, TRUE);
+  $roles = array(t('Role ID') => t('Role name')) + $roles;
+  architecture_csv_page('user_roles', $roles);
+}
+
+/**
+ * Generates a CSV file of menus information.
+ */
+function architecture_menus_csv() {
+  $menus = architecture_menus();
+  $i = 1;
+  $rows = array();
+  $rows['blank_' . $i++] = array(
+    'Machine name',
+    'Title',
+    'Description',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    'Notes',
+  );
+  foreach ($menus as $name => $menu) {
+    $rows['blank_' . $i++] = array(
+      $menu['menu_name'],
+      $menu['title'],
+      $menu['description'],
+    );
+    if (count($menu['menu_blocks'])) {
+      $rows['blank_' . $i++] = array(
+        'MENU BLOCKS',
+        '',
+        '',
+        'Block title',
+        'Admin title',
+        'Starting level',
+        'Max depth',
+        'Expand children',
+        'Settings',
+      );
+      foreach ($menu['menu_blocks'] as $delta => $block) {
+        $rows['blank_' . $i++] = array(
+          '',
+          '',
+          '',
+          $block['block_title'],
+          $block['admin_title'],
+          $block['starting_level'],
+          $block['max_depth'],
+          $block['expand_children'],
+        );
+      }
+    }
+    $rows['blank_' . $i++] = array();
+  }
+  architecture_csv_page('menus', $rows, TRUE);
+}
+
+/**
+ * Generates a CSV file of nodequeue information.
+ */
+function architecture_nodequeues_csv() {
+  $nodequeues = architecture_nodequeues();
+  $i = 1;
+  $rows = array();
+  $rows['blank_' . $i++] = array(
+    t('Title'),
+    t('Machine name'),
+    t('Node types'),
+    t('Size'),
+    t('Add Link text'),
+    t('Remove Link text'),
+    t('Roles'),
+    t('Notes'),
+  );
+  foreach ($nodequeues as $nodequeue) {
+    $rows['blank_' . $i++] = array(
+      $nodequeue->title,
+      $nodequeue->name,
+      implode(', ', $nodequeue->types),
+      $nodequeue->size,
+      $nodequeue->link,
+      $nodequeue->link_remove,
+    );
+  }
+  architecture_csv_page('nodequeues', $rows, TRUE);
+}
+
+/**
+ * Generates a CSV file of imagestyle information.
+ */
+function architecture_image_styles_csv() {
+  $actions = imagecache_action_definitions();
+  $styles = architecture_image_styles();
+  //  Style name	Effect	Settings	Notes
+  $i = 1;
+  $rows = array();
+  $rows['blank_' . $i++] = array(
+    t('Style name'),
+    t('Effects'),
+    t('Settings'),
+    t('Notes'),
+  );
+  foreach ($styles as $name => $style) {
+    $name = $style['presetname'];
+    foreach($style['actions'] as $effect) {
+      $settings = '';
+      if (isset($effect['data']['width']) && isset($effect['data']['height'])) {
+        $settings = $effect['data']['width'] . 'x' . $effect['data']['height'];
+      }
+      elseif (isset($effect['data']['width'])) {
+        $settings = $effect['data']['width'] . t(' wide');
+      }
+      elseif (isset($effect['data']['height'])) {
+        $settings = $effect['data']['height'] . t(' high');
+      }
+      elseif (isset($effect['data']['degrees'])) {
+        $settings = $effect['data']['degrees'] . t(' degrees');
+      }
+      $rows['blank_' . $i++] = array(
+        $name,
+        $actions[$effect['action']]['name'],
+        $settings,
+      );
+      $name = '';
+    }
+    $rows['blank_' . $i++] = array();
+  }
+  architecture_csv_page('image_styles', $rows, TRUE);
+}
+
+/**
+ * Generates a CSV file of content types and their fields.
+ *
+ * @param Array $content_type
+ *   A single content type to be returned. If NULL, return info
+ *   about all content types.
+ */
+function architecture_content_types_fields_csv() {
+  $content_types = architecture_content_types_fields();
+  $i = 1;
+  $rows = array();
+  foreach ($content_types as $type => $details) {
+    $rows['blank_' . $i++] = array($type, strtoupper($details['label']));
+    $rows['blank_' . $i++] = array();
+    foreach ($details['bundles'] as $bundle_type => $bundle) {
+      $rows['blank_' . $i++] = array(
+        $bundle_type,
+        $bundle['label'],
+        $bundle['description'],
+      );
+      // Fields header.
+      $rows['blank_' . $i++] = array(
+        'Machine name',
+        'Name',
+        'Field group',
+        'Type',
+        'Required',
+        '# Values',
+        'Widget type',
+        'Widget label',
+        'Field settings',
+        'Default',
+        'Help text',
+        'Notes',
+      );
+      if ($details['fieldable']) {
+        foreach ($bundle['fields'] as $machine_name => $field_specs) {
+          $settings = array();
+          foreach ($field_specs['field_settings'] as $name => $val) {
+            if (is_scalar($val)) {
+              $settings[] = "$name: $val";
+            }
+          }
+          $field_specs['field_settings'] = implode(', ', $settings);
+          array_unshift($field_specs, $machine_name);
+          $rows['blank_' . $i++] = $field_specs;
+        }
+        $rows['blank_' . $i++] = array();
+      }
+    }
+    $rows['blank_' . $i++] = array();
+  }
+  architecture_csv_page('content_types_fields', $rows, TRUE);
+}
+
+/**
+ * Generates a CSV file of taxonomies and their terms.
+ *
+ */
+function architecture_taxonomies_csv() {
+  // TODO: Include pathauto information, term counts, content types.
+  $taxonomies = architecture_taxonomies();
+  $i = 1;
+  $rows = array();
+  $rows['blank_' . $i++] = array(
+    'Name',
+    'Vocabulary ID',
+    'Description',
+    'Hierarchy',
+    'Module',
+  );
+  foreach ($taxonomies as $key => $taxonomy) {
+    unset($taxonomy['terms']);
+    $rows['blank_' . $i++] = $taxonomy;
+  }
+  architecture_csv_page('taxonomies', $rows, TRUE);
+}
+
+/**
+ * Generates a CSV file of taxonomies and their terms.
+ *
+ */
+function architecture_views_csv() {
+  $views = architecture_views();
+  $i = 1;
+  $rows = array();
+  $rows['blank_' . $i++] = array(
+    'Name',
+    'Machine name',
+    'Base table',
+    'Description',
+    'Displays',
+  );
+  foreach ($views as $key => $view) {
+    $rows['blank_' . $i++] = array(
+      $view['name'],
+      $view['machine_name'],
+      $view['base_table'],
+      $view['description'],
+    );
+    $rows['blank_' . $i++] = array(
+      'DISPLAYS',
+      '',
+      '',
+      '',
+      t('Type'),
+      t('Machine name'),
+      t('Title'),
+      t('Fields'),
+      t('Filters'),
+      t('Sorts'),
+      t('Relationships'),
+      t('Arguments'),
+      t('Style'),
+      t('Empty text'),
+      t('Pager'),
+      t('Access control'),
+      t('Other display settings'),
+      t('Notes'),
+    );
+    foreach ($view['displays'] as $display_key => $display) {
+      
+      $rows['blank_' . $i++] = array(
+        '',
+        '',
+        '',
+        '',
+        $display['type'],
+        $display['machine_name'],
+        $display['title'],
+
+        $display['fields'] ? implode(', ', $display['fields']) : '',
+        $display['filters'] ? implode(', ', $display['filters']) : '',
+        $display['sorts'] ? implode(', ', $display['sorts']) : '',
+        $display['relationships'] ? implode(', ', $display['relationships']) : '',
+        $display['arguments'] ? implode(', ', $display['arguments']) : '',
+
+        $display['style'],
+        $display['empty_text'],
+        $display['pager'],
+        $display['access_control'],
+      );
+    }
+  }
+  architecture_csv_page('views', $rows, TRUE);
+}
+
+/**
+ * Utility function to generate a CSV file from an array.
+ *
+ * @param String $filename
+ *   The filename of the CSV file to be returned (without the .csv extension).
+ * @param Array $array
+ *   An associative array. Each primary key in the array corresponds to a single
+ *   row in the resulting CSV file.
+ * @param Boolean $omit_key
+ *   If true, exclude primary keys from the exported CSV rows.
+ */
+function architecture_csv_page($filename='results', $array=array(), $omit_key=FALSE) {
+  // Add the headers needed to let the browser know this is a csv file download.
+  drupal_set_header('Content-Type: text/csv; utf-8');
+  drupal_set_header('Content-Disposition: attachment; filename = ' . $filename . '.csv');
+
+  // Instead of writing to a file, we write to the output stream.
+  $fh = fopen('php://output', 'w');
+
+  // Create a simpler, two-dimensional array suitable for CSV export.
+  $return = array();
+  foreach ($array as $key => $val) {
+    if (!is_array($val)) {
+      $return[] = $omit_key ? array($val) : array($key, $val);
+    }
+    else {
+      $row = $omit_key ? array() : array($key);
+      foreach ($val as $key2 => $val2) {
+        if (is_array($val2)) {
+          $row[] = $key2;
+        }
+        elseif (is_bool($val2)) {
+          $row[] = $val2 ? 'TRUE' : 'FALSE';
+        }
+        else {
+          $row[] = $val2;
+        }
+      }
+      $return[] = $row;
+    }
+  }
+
+  // Loop through the rows and write them as csv data.
+  foreach ($return as $row) {
+    fputcsv($fh, $row);
+  }
+
+  // Close the output stream.
+  fclose($fh);
+}
+
+/**
+ * Generate an array of Drupal taxonomies and their terms.
+ *
+ * @param Array $requested_taxonomies
+ *   A list of taxonomies to be returned.
+ * 
+ * @return Array
+ *   An associative array of basic information about taxonomies
+ *   and their terms.
+ */
 function architecture_taxonomies($requested_taxonomies=NULL) {
+  // TODO: Add pathauto, taxonomy term counts.
   $vocabularies = taxonomy_get_vocabularies();
+  $hier = array(t('Disabled'), t('Single'), t('Multiple'));
   $vocabs = array();
-  foreach ($vocabularies as $vocab => $details) {
+  foreach ($vocabularies as $vocab => $vocabulary) {
+    
     $vocabs[$vocab] = array(
-      'name' => $details->name,
-      'machine_name' => $details->machine_name,
-      'description' => $details->description,
+      'name' => $vocabulary->name,
+      'vid' => $vocabulary->vid,
+      'description' => $vocabulary->description,
+      'hierarchy' => $hier[$vocabulary->hierarchy],
+      'module' => $vocabulary->module,
       'terms' => array(),
     );
     $terms = taxonomy_get_tree($vocab);
-    foreach($terms as $term){
-      $vocabs[$vocab]['terms'][]= $term->name;
+    foreach ($terms as $term) {
+      $vocabs[$vocab]['terms'][] = $term->name;
     }
   }
   return $vocabs;
 }
 
+/**
+ * Generate an array of Drupal views.
+ *
+ * @return Array
+ *   An associative array of basic information about taxonomies
+ *   and their terms.
+ */
+function architecture_views($requested_views=NULL) {
+  $views = views_get_all_views();
+  $result = array();
+  foreach ($views as $key => $view) {
+    $displays = array();
+    foreach ($view->display as $display_key => $display) {
+      $style = NULL;
+      if (isset($display->display_options['style_plugin'])) {
+        $style = $display->display_options['style_plugin'];
+      }
+      $fields = $filters = $sorts = $relationships = $arguments = NULL;
+      if (isset($display->display_options['fields'])) {
+        $fields = array_keys($display->display_options['fields']);
+      }
+      if (isset($display->display_options['filters'])) {
+        $filters = array_keys($display->display_options['filters']);
+      }
+      if (isset($display->display_options['sorts'])) {
+        $sorts = array_keys($display->display_options['sorts']);
+      }
+      if (isset($display->display_options['relationships'])) {
+        $relationships = array_keys($display->display_options['relationships']);
+      }
+      if (isset($display->display_options['arguments'])) {
+        $arguments = array_keys($display->display_options['arguments']);
+      }
+      // Text to display if view is empty.
+      $empty = NULL;
+      if (isset($display->display_options['empty'])) {
+        $empty = array();
+        if (is_array($display->display_options['empty'])) {
+          foreach ($display->display_options['empty'] as $empty_key => $empty_values) {
+            $empty[] = $empty_values['content'];
+          }
+          $empty = implode('\n', $empty);
+        }
+        else {
+          $empty = $display->display_options['empty'];
+        }
+      }
+      // Items per page.
+      $pager = NULL;
+      // Views API 3.
+      if (isset($display->display_options['pager'])) {
+        if (is_array($display->display_options['pager'])  && isset($display->display_options['pager']['options']['items_per_page'])) {
+          $pager = $display->display_options['pager']['options']['items_per_page'];
+        } 
+      }
+      // Views API 2.
+      elseif (isset($display->display_options['use_pager']) && $display->display_options['use_pager']) {
+        if (isset($display->display_options['use_pager']) && $display->display_options['use_pager'] && isset($display->display_options['items_per_page'])) {
+          $pager = $display->display_options['items_per_page'];
+        }
+      }
+      // Access rules.
+      $access = NULL;
+      if (isset($display->display_options['access']) && is_array($display->display_options['access'])) {
+        $access = $display->display_options['access']['type'];
+      }
+      
+      $displays[$display_key] = array(
+        'type' => $display->display_plugin,
+        'machine_name' => $display_key,
+        'title' => $display->display_title,
+        'fields' => $fields,
+        'filters' => $filters,
+        'sorts' => $sorts,
+        'relationships' => $relationships,
+        'arguments' => $arguments,
+        'style' => $style,
+        'empty_text' => $empty,
+        'pager' => $pager,
+        'access_control' => $access,
+        'display_settings' => $display_key,
+        'notes' => '',
+      );
+    }
+    $result[$key] = array(
+      'name' => $view->human_name,
+      'machine_name' => $view->name,
+      'base_table' => $view->base_table,
+      'description' => $view->description,
+      'displays' => $displays,
+    );
+  }
+  return $result;
+}
+
+/**
+ * Produce the user roles list.
+ *
+ * @return Array
+ *   A simple list of user roles
+ */
+function architecture_user_roles() {
+  $result = db_query('SELECT r.rid, r.name FROM {role} r');
+  $roles = array();
+  while ($role = db_fetch_object($result)) {
+    $roles[$role->rid] = $role->name;
+  }
+  return $roles;
+}
+
+/**
+ * Produce the menus list.
+ *
+ * @return Array
+ *   An array of menus.
+ */
+function architecture_menus() {
+  $menu_names = menu_get_menus();
+  $menus = array();
+  foreach (array_keys($menu_names) as $menu_name) {
+    $menu = menu_load($menu_name);
+    $menus[$menu_name] = array(
+      'menu_name' => $menu_name,
+      'title' => $menu['title'],
+      'description' => $menu['description'],
+      'menu_blocks' => array(),
+    );
+  }
+  if (module_exists('menu_block')) {
+    module_load_include('inc', 'menu_block', 'menu_block.admin');
+    $block_ids = variable_get('menu_block_ids', array());
+    $menu_blocks = array();
+    foreach ($block_ids as $delta) {
+      $parent = variable_get("menu_block_{$delta}_parent", '');
+      if (!empty($parent)) {
+        list($parent_menu_name, $parent_mlid) = explode(':', $parent);
+        $parent_item = menu_link_load($parent_mlid);
+        $parent_title = $parent_item['title'];
+      }
+      
+      $menus[$parent_menu_name]['menu_blocks'][$delta] = array(
+        'block_title' => _menu_block_format_title(menu_block_get_config($delta)),
+        'title_link' => variable_get("menu_block_{$delta}_title_link", ''),
+        'admin_title' => variable_get("menu_block_{$delta}_admin_title", ''),
+        'parent' => variable_get("menu_block_{$delta}_parent", ''),
+        'parent_menu_name' => $parent_menu_name,
+        'parent_title' => $parent_title,
+        'starting_level' => variable_get("menu_block_{$delta}_level", ''),
+        'follow' => variable_get("menu_block_{$delta}_follow", ''),
+        'max_depth' => variable_get("menu_block_{$delta}_depth", ''),
+        'expand_children' => variable_get("menu_block_{$delta}_expanded", ''),
+        'sort' => variable_get("menu_block_{$delta}_sort", ''),
+      );
+    }
+  }
+  return $menus;
+}
+
+/**
+ * Produce the nodequeues list.
+ *
+ * @return Array
+ *   An array of nodequeues.
+ */
+function architecture_nodequeues() {
+  $queues = nodequeue_load_queues(nodequeue_get_all_qids());
+  return $queues;
+}
+
+/**
+ * Produce the image styles list.
+ *
+ * @return Array
+ *   An array of image styles.
+ */
+function architecture_image_styles() {
+  $styles = imagecache_presets();
+  return $styles;
+}
+
+/**
+ * Return an HTML page listing taxonomies and their terms.
+ *
+ * @param Array $vocabularies
+ *   An associative array of basic information about taxonomies
+ *   and their terms.
+ * 
+ * @return HTML
+ *   Formatted HTML.
+ */
 function theme_architecture_taxonomies($vocabularies=array()) {
   $output = '';
-  foreach ($vocabularies as $vocab => $details) {
-    $output .= '<h1 class="architecture-entity">' . $details['name'] . '</h1>';
-    $output .= "<p><b>Machine name: </b>" . $details['machine_name'] . '</p>';
-    if ($details['description']) {
-      $output .= '<p>' . $details['description'] . '</p>';
+  foreach ($vocabularies as $vocab => $vocabulary) {
+    $output .= '<h1 class="architecture-content-type">' . $vocabulary['name'] . '</h1>';
+    $output .= "<p><b>Vocabulary ID: </b>" . $vocabulary['vid'] . '</p>';
+    if ($vocabulary['description']) {
+      $output .= '<p>' . $vocabulary['description'] . '</p>';
     }
-    $output .= theme('item_list', array(
-      'items' => $details['terms'],
-      'title' => 'Terms',
-      'type' => 'ul',
-      'attributes' => array('class' => array('architecture-fields', 'architecture-vocabulary-term' . '-' . $details['machine_name'])),
-    ));
+    $output .= theme('item_list', $vocabulary['terms'], 'Terms');
   }
   return $output;
 }
 
 /**
-* Returns an array of content types
-*
-* @param $requested_types
-*   A simple array of content types to be returned.
-*/
-function architecture_content_types($requested_types=NULL) {
-  $types = _node_types_build()->types;
+ * Returns an array of content types.
+ *
+ * @param Array $requested_types
+ *   A simple array of content types to be returned.
+ * 
+ * @return Array
+ *   An associative array of content types and the names of their fields.
+ */
+function architecture_content_types($requested_types=NULL, $header=FALSE) {
+  // TODO: Add node counts.
+  // $count = db_query('SELECT COUNT(n.nid) FROM {node} n WHERE n.type = :type', array(':type' => $info->type))->fetchField();
+
+  global $theme_key;
+  $settings = theme_get_settings($theme_key);
+  $types = node_get_types();
   $content_types = array();
+  if ($header) {
+    $content_types[] = array(
+      'Name',
+      'Machine name',
+      'Module',
+      'Title label',
+      'Description',
+      'Publish',
+      'Byline',
+      'Comments',
+      'Fields',
+    );
+  }
   foreach ($types as $type => $details) {
     if (!is_array($requested_types) || in_array($type, $requested_types)) {
+      $options = variable_get('node_options_' . $type, array('status', 'promote'));
+      $comments = (module_exists('comment') && (variable_get('comment_' . $type, COMMENT_NODE_OPEN) == COMMENT_NODE_OPEN)) ? TRUE : FALSE;
       $content_types[$type] = array(
         'name' => $details->name,
+        'machine_name' => $details->type,
+        'module' => $details->module,
+        'title_label' => $details->has_title ? $details->title_label : '',
         'description' => $details->description,
+        'publish' => in_array('status', $options) ? TRUE : FALSE,
+        'byline' => $settings['toggle_node_info_' . $type] ? TRUE : FALSE,
+        'comments' => $comments,
         'fields' => array(),
       );
-      $fields = field_info_instances('node', $type);
+      $content_type = content_types($type);
+      $fields = $content_type['fields'];
       foreach ($fields as $name => $particulars) {
-        $content_types[$type]['fields'][$name] = $particulars['label'];
+        $content_types[$type]['fields'][$name] = $particulars['widget']['label'];
       }
     }
   }
@@ -135,97 +832,106 @@ function architecture_content_types($requested_types=NULL) {
 }
 
 /**
-* Returns an array of entity types
-*
-* @param $requested_types
-*   A simple array of entity types to be returned.
-*/
-function architecture_entity_types($requested_types=NULL) {
-  $types = entity_get_info();
-  $content_types = _node_types_build()->types;
-  $entity_types = array();
-  foreach ($types as $type => $details) {
-    if (!is_array($requested_types) || in_array($type, $requested_types)) {
-      $entity_types[$type] = array(
-        'label' => $details['label'],
-        'description' => $details['description'],
-        'fieldable' => $details['fieldable'],
-        'bundles' => array(),
-      );
-      foreach ($details['bundles'] as $bundle_name => $bundle_details) {
-        $entity_types[$type]['bundles'][$bundle_name] = array(
-          'label' => $bundle_details['label'],
-          'description' => $bundle_details['description'],
-        );
-        if ($type == 'node') {
-          $entity_types[$type]['bundles'][$bundle_name]['description'] = $content_types[$bundle_name]->description;
-        }
-        if ($details['fieldable']) {
-          $fields = field_info_instances($type, $bundle_name);
-          $entity_types[$type]['bundles'][$bundle_name]['fields'] = array();
-          foreach ($fields as $name => $particulars) {
-            $field_info = field_info_field($name);
-            $widget_type = field_info_widget_types($particulars['widget']['type']);
-            $entity_types[$type]['bundles'][$bundle_name]['fields'][$name] = array(
-              'label' => $particulars['label'],
-              'type' => $field_info['type'],
-              'description' => $particulars['description'],
-              'required' => $particulars['required'],
-              'widget_type' => $particulars['widget']['type'],
-              'widget_label' => $widget_type['label'],
-            );
-          }
-        }
-      }
-    }
+ * Returns an array of content types and their fields.
+ *
+ * @return Array
+ *   An associative array of content types and detailed information about
+ *   their fields.
+ */
+function architecture_content_types_fields() {
+  $content_types = node_get_types();
+  $result = array();
+  $result['node'] = array(
+    'label' => 'Node',
+    'description' => t('The main content container in Drupal 6.'),
+    'fieldable' => TRUE,
+    'bundles' => array(),
+  );
+  foreach ($content_types as $type_name => $content_type) {
+    $result['node']['bundles'][$type_name] = array(
+      'label' => $content_type->name,
+      'description' => $content_type->description,
+    );
+    $result['node']['bundles'][$type_name]['fields'] = architecture_fields_details($type_name);
   }
-  return $entity_types;
+  return $result;
 }
 
 /**
-* Turns an array of entity types into formatted HTML.
-*
-* @param $entity_types
-*   An array of entity types.
-*/
-function theme_architecture_entity_types($entity_types=array()) {
-  $output = '';
-  foreach ($entity_types as $type => $details) {
-    $output .= '<h1 class="architecture-entity">' . $details['label'] . ' entities</h1>';
-    if ($details['description']) {
-      $output .= '<p>' . $details['description'] . '</p>';
-    }
-    foreach ($details['bundles'] as $bundle_name => $bundle_details) {
-      $output .= '<h2 class="architecture-bundle">' . $bundle_details['label'] . '</h2>';
-      $output .= "<p><b>Machine name: </b>" . $bundle_name . '</p>';
-      if ($bundle_details['description']) {
-        $output .= "<p>" . $bundle_details['description'] . '</p>';
-      }
-      if ($details['fieldable']) {
-        $output .= theme('architecture_fields', $bundle_details['fields'], $type, $bundle_name);
-      }
-    }
+ * Return array of detailed info on fields belonging to a content type.
+ *
+ * @param String $type
+ *   The content type.
+ * 
+ * @return Array
+ *   An associative array of detailed information about the fields which belong
+ *   to that content type.
+ */
+function architecture_fields_details($type) {
+  if (module_exists('fieldgroup')) {
+    $groups = fieldgroup_groups($type);
   }
-  return $output;
+  $content_type = content_types($type);
+  $content_widget_types = _content_widget_types();
+  $fields = $content_type['fields'];
+  $fields_list = array();
+  foreach ($fields as $name => $particulars) {
+    // Unravel weird system for indicating number of allowed field values.
+    $multiple = 1;
+    if ($particulars['multiple']) {
+      $multiple = $particulars['multiple'];
+      if ($particulars['multiple'] == 1) {
+        $multiple = 'unlimited';
+      }
+    }
+    // Build the information to be returned for one field.
+    // Machine name.
+    $fields_list[$name] = array(
+      // Name.
+      'label' => $particulars['widget']['label'],
+      // Field group.
+      'field_group' => module_exists('fieldgroup') ? t($groups[fieldgroup_get_group($type, $name)]['label']) : '',
+      // Type.
+      'type' => $particulars['type'],
+      // Required.
+      'required' => $particulars['required'],
+      // # of values.
+      'num_values' => $multiple,
+      // Widget type.
+      'widget_type' => $particulars['widget']['type'],
+      // Widget label.
+      'widget_label' => $content_widget_types[$particulars['widget']['type']]['label'],
+      // Settings.
+      'field_settings' => '', //TODO,
+      // Default value.
+      'default' => (isset($particulars['widget']['default_value'][0]['value']) && is_scalar($particulars['widget']['default_value'][0]['value'])) ? $particulars['widget']['default_value'][0]['value'] : '',
+      // Help text.
+      'description' => $particulars['widget']['description'],
+    );
+  }
+  return $fields_list;
 }
 
 /**
-* Turns an array of fields into a formatted HTML list.
-*
-* @param $fields
-*   An array of fields.
-* @param $entity_type
-*   The machine name of the entity type.
-* @param $bundle
-*   The machine name of the bundle.
-*/
-function theme_architecture_fields($fields=array(), $entity_type='', $bundle='') {
+ * Turns an array of fields into a formatted HTML list.
+ *
+ * @param Array $fields
+ *   An array of fields.
+ * @param String $content_type
+ *   The machine name of the content type.
+ * @param String $bundle
+ *   The machine name of the bundle.
+ * 
+ * @return HTML
+ *   An unordered HTML list.
+ */
+function theme_architecture_fields($fields=array(), $content_type='', $bundle='') {
   if ($fields) {
     $items = array();
     foreach ($fields as $machine_name => $field) {
       $items[] = '<b>' . $field['label'] . '</b>' .
         ($field['required'] ? '<span class="form-required" title="This field is required.">*</span>' : '') .
-        ' <i>(' . $machine_name . '):</i> ' . $field['type'] . 
+        ' <i>(' . $machine_name . '):</i> ' . $field['type'] .
         "<br /> Widget: " . $field['widget_label'] . ' <i>(' . $field['widget_type'] . ')</i>' .
         ($field['description'] ? '<br /><i>Help text:</i> ' . $field['description'] : '');
     }
@@ -233,41 +939,45 @@ function theme_architecture_fields($fields=array(), $entity_type='', $bundle='')
       'items' => $items,
       'title' => 'Fields',
       'type' => 'ul',
-      'attributes' => array('class' => array('architecture-fields', 'architecture-' . $entity_type . '-' . $type)),
+      'attributes' => array('class' => array('architecture-fields', 'architecture-' . $content_type . '-field')),
     ));
   }
 }
 
 /**
-* Turns an array of content types into formatted HTML.
-*
-* @param $content_types
-*   An array of content_types.
-*/
+ * Turns an array of content types into formatted HTML.
+ *
+ * @param Array $content_types
+ *   An array of content types.
+ * 
+ * @return HTML
+ *   A formatted HTML listing.
+ */
 function theme_architecture_content_types($content_types=array()) {
-  $items = array();
+  $output = '';
   foreach ($content_types as $type => $details) {
-    $item = '<b>' . $details['name'] . ' (' . $type . '):</b> ' . $details['description'];
-    if ($details['fields']) {
-      $item .= theme('item_list', array(
-        'items' => array_values($details['fields']),
-        'title' => 'Fields',
-        'type' => 'ul',
-        'attributes' => array('class' => array('architecture-fields', 'architecture-content-type-' . $type)),
-      ));
+    $output .= '<h1 class="architecture-content">' . $details['name'] . '</h1>';
+    if ($details['description']) {
+      $output .= '<p>' . $details['description'] . '</p>';
     }
-    $items[] = $item;
+    if ($details['machine_name']) {
+      $output .= '<p><b>Machine name:</b> ' . $details['machine_name'] . '</p>';
+    }
+    if ($details['fields']) {
+      $output .= theme('item_list', array_values($details['fields']), 'Fields');
+    }
   }
-  return theme('item_list', array(
-    'items' => $items,
-    'type' => 'ul',
-    'attributes' => array('class' => 'architecture-content-types'),
-  ));
+  return $output;
 }
 
 /**
- * Command callback.
  * List your site's variables.
+ * 
+ * @param Array $requested_variables
+ *   An array of variables requested.
+ * 
+ * @return Array
+ *   A list of site variables.
  */
 function architecture_variables($requested_variables=NULL) {
   global $conf;
@@ -275,6 +985,15 @@ function architecture_variables($requested_variables=NULL) {
   return $keys;
 }
 
+/**
+ * Turns an array of site variables into a formatted array.
+ * 
+ * @param Array $keys
+ *   A simple array of variables requested.
+ * 
+ * @return HTML
+ *   A data dump of variables and their values.
+ */
 function theme_architecture_variables($keys=array()) {
   global $conf;
   $output = '';
@@ -285,3 +1004,1880 @@ function theme_architecture_variables($keys=array()) {
   return $output;
 }
 
+
+
+
+
+// STUFF FROM SITEDOC MODULE
+
+/****************************/
+/**   Callable functions   **/
+/****************************/
+
+/**
+ *   Produce the basic system overview.
+ *
+ *  Parameters:
+ *    TRUE/FALSE - whether to fix Cron stall problem if detected.
+ *
+ *  Return: HTML string.
+ */
+function _architecture_drupal($kill_cron = 0) {
+  global $base_url;
+  $dest = drupal_get_destination();
+  $_abled = array(t('Disabled'), t('Enabled'));
+  $_bool = array(t('False'), t('True'));
+  $_noyes = array(t('No'), t('Yes'));
+
+  $table = array(
+    'header' => array(t('Item'), t('Value'), t('Operation')),
+    'attributes' => array('style' => 'width: auto;'),
+    );
+  $setting = t('Settings');
+  $rows = array();
+  $output = NULL;
+
+  $rows[] = array(t('Site Name'), variable_get('site_name', 'none'), l($setting, 'admin/config/system/site-information', array('query' => $dest)));
+  $rows[] = array(t('Version'), VERSION, NULL);
+  $rows[] = array(t('Configuration file'), conf_path() .'/settings.php', NULL);
+  $rows[] = array(t('Install profile'), variable_get('install_profile', 'default'), NULL);
+  $rows[] = array(t('Base URL'), $base_url, NULL);
+
+  $cache = variable_get('cache', 0);
+  $cache_type = array(t('Disabled'), t('Normal'), t('Agressive'));
+  $rows[] = array(t('Cache'), $cache_type[$cache], l($setting, 'admin/config/system/performance', array('query' => $dest)));
+  $rows[] = array(t('Minimum cache lifetime'), format_interval(variable_get('cache_lifetime', 0), 1), l($setting, 'admin/config/system/performance', array('query' => $dest)));
+  $rows[] = array(t('CSS preprocess'), variable_get('preprocess_css', FALSE) ? t('Enabled') : t('Disabled'), l($setting, 'admin/config/system/performance', array('query' => $dest)));
+
+  $clean_urls = variable_get('clean_url', FALSE);
+  $rows[] = array(t('Clean URLS'), $_abled[$clean_urls], l($setting, 'admin/config/system/clean-urls', array('query' => $dest)));
+
+  $cron_last = variable_get('cron_last', NULL);
+  $cron_when = isset($cron_last) ? t('Last run !time ago', array('!time' => format_interval(time() - $cron_last))) : t('Not run yet');
+  // If it last ran more than an hour ago, add "Run now" link.
+  if (time() - $cron_last > 3600) {
+    $cron_op = l(t('Run now'), 'admin/reportsstatus/run-cron', array('query' => $dest));
+  }
+  else {
+    $cron_op = NULL;
+  }
+  $cron_semaphore = variable_get('cron_semaphore', NULL);  /* is it running now? */
+  if (isset($cron_semaphore)) {
+    $how_long = time() - $cron_semaphore;  /* how long it's been running (secs) */
+    $cron_when .= ' - '. t('Running for !time', array('!time' => format_interval($how_long)))
+                  .__architecture_img_warning();
+    if ($kill_cron) {
+      if ($kill_cron <= $how_long) {
+        variable_del('cron_semaphore');  /* turn off "cron started" flag */
+        variable_del('cron_last');       /** I don't think this is actually needed **/
+      } /* end if how long */
+    }  /* end if kill_cron */
+  }  /* end if semaphore */
+  $rows[] = array(t('Cron'), $cron_when, $cron_op);
+
+  if (module_exists('search')) {
+    $rows[] = array(t('Search Cron limit'), variable_get("search_cron_limit", NULL), l($setting, 'admin/config/system/search', array('query' => $dest)));
+    $remaining = 0;
+    $total = 0;
+    foreach (module_list() as $module) {
+      if (module_hook($module, 'search')) {
+        $status = module_invoke($module, 'search', 'status');
+        $remaining += $status['remaining'];
+        $total += $status['total'];
+      }
+    }
+    $count = format_plural($remaining, 'There is 1 item left to index.', 'There are @count items left to index.');
+    $percentage = ((int)min(100, 100 * ($total - $remaining) / max(1, $total))) .'%';
+    $status = t('%percentage of the site has been indexed.', array('%percentage' => $percentage)) .' '. $count;
+    $link = l($setting, 'admin/config/system/search', array('query' => $dest));
+    if ($remaining) {
+      $link .= ', '. l(t('Run Cron'), 'admin/reports/status/run-cron', array('query' => $dest));
+    }
+    $rows[] = array(t('Search status'), $status, $link);
+  }
+
+  $rows[] = array(t('Anonymous'), variable_get('anonymous', 'anonymous'), l($setting, 'admin/config/system/site-information', array('query' => $dest)));
+
+  $download_op = l($setting, 'admin/config/media/file-system', array('query' => $dest));
+  $rows[] = array(t('Default download method '), variable_get('file_default_scheme', 'public'), $download_op);
+
+  $file_dirs = array(
+    t('public') => variable_get('file_public_path', FALSE),
+    t('private') => variable_get('file_public_path', FALSE),
+    t('temporary') => variable_get('file_temporary_path', FALSE),
+    );
+  $file_paths = array();
+  foreach (array_filter($file_dirs) as $method => $dir) {
+    $file_paths[] = "$method: $dir";
+  }
+  $rows[] = array(t('File locations'), implode(', ', $file_paths), $download_op);
+
+  // Is the menu choice restricted?
+  $menu_restrict = variable_get('menu_parent_items', NULL);
+  // "Show all menus" is Zero. Unless the setting has been changed it won't be present (NULL)
+  if ($menu_restrict) {
+    $menu_msg = t('Restricted') .' ('. $menu_restrict .') '. __architecture_img_warning();
+  }
+  else {
+    $menu_msg = t('Show all menus') .__architecture_img_ok();
+  }
+  $rows[] = array(t('Content menu links'), $menu_msg, l($setting, 'admin/build/menu/settings', array('query' => $dest)));
+
+  $rows[] = array(t('Default theme'), variable_get('theme_default', 'standard'), l($setting, 'admin/build/themes', array('query' => $dest)));
+
+  $teaser_len = variable_get('teaser_length', 300);
+  $rows[] = array(t('Teaser length'), $teaser_len ? $teaser_len : t('unlimited'), l($setting, 'admin/content/node-settings', array('query' => $dest)));
+
+  // Get default filter and then look up its name.
+  // Using 0 here to identify that it hasn't been set.
+  $filter = $filter_default = variable_get('filter_default_format', 0);
+  if ($filter_default == 0) {
+    $filter = 1;
+  }
+  $filter_name = db_query("SELECT f.name FROM {filter_format} f WHERE f.format = :format", array(':format' => $filter))->fetchField();
+  // @TODO: Don't hard-code filtered html filter number.
+  $filter_warn = $filter_op = NULL;
+  if ($filter_default != 1) {
+    if ($filter_default == 0) {
+      $filter_warn .= ' <em>('. t('not set') .')</em>';
+    }
+    $filter_warn .= __architecture_img_warning();
+    $filter_op = l($setting, 'admin/config/system/filters', array('query' => $dest));
+  }
+  $rows[] = array(t('Default filter format'), $filter_name . $filter_warn, $filter_op);
+
+  $rows[] = array(t('Operating system'), php_uname('s'), NULL);
+  
+  $table['rows'] = $rows;
+
+  $fieldset = array(
+    '#title' => t('Drupal'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+    '#value' => '<div class="_architecture_subsection">'. theme('table', $table) .'</div>',
+    );
+  $output .=  theme('fieldset', array('element' => $fieldset));
+
+  // Webserver information.
+  $rows = array();
+
+  $rows[] = array(t('Web server'), $_SERVER['SERVER_SOFTWARE'], NULL);
+  if (strpos($_SERVER['SERVER_SOFTWARE'], 'Apache') !== FALSE) { /* is it Apache? */
+    $rows[] = array(t('Server name'), $_SERVER['SERVER_NAME'], NULL);
+    if (function_exists('apache_get_modules')) { /* can we get a list of modules ? */
+      $rows[] = array(t('Apache modules'), implode(', ', apache_get_modules()), NULL);
+    } /* end if function */
+  } /* end if apache */
+  
+  $table['rows'] = $rows;
+
+  $fieldset = array(
+    '#title' => t('Webserver Information'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    '#value' => '<div class="_architecture_subsection">'. theme('table', $table) .'</div>',
+  );
+  $output .=  theme('fieldset', array('element' => $fieldset));
+
+  // Php info.
+  $rows = array();
+  $error_names = array(
+    'E_ERROR' => 1,
+    'E_WARNING' => 2,
+    'E_PARSE' => 4,
+    'E_NOTICE' => 8,
+    'E_CORE_ERROR' => 16,
+    'E_CORE_WARNING' => 32,
+    'E_COMPILE_ERROR' => 64,
+    'E_COMPILE_WARNING' => 128,
+    'E_USER_ERROR' => 256,
+    'E_USER_WARNING' => 512,
+    'E_USER_NOTICE' => 1024,
+    'E_STRICT' => 2048,
+    'E_RECOVERABLE_ERROR' => 4096,
+    'E_DEPRECATED' => 8192,
+    'E_USER_DEPRECATED' => 16384
+    );
+
+  list($php_vers, $php_rel, $php_fix) = explode('.', phpversion());
+
+  $rows[] = array(t('Php version'), phpversion(), l(t('View phpinfo'), 'admin/config/system/_architecture/phpinfo'));
+  if ($php_vers < 6) {
+    $safe_mode = ini_get('safe_mode');
+    if (is_bool($safe_mode)) {
+      $safe_mode = $_abled[$safe_mode];
+    }
+    if (empty($safe_mode)) {
+      $safe_mode = $_abled[0];
+    }
+    $rows[] = array(t('Safe mode'), $safe_mode, NULL);
+  }
+
+  $mem_limit = ini_get('memory_limit');
+  $rows[] = array(t('Memory limit'), $mem_limit ? $mem_limit : t('default') .' '. __architecture_img_warning(), NULL);
+
+  $disperr = ini_get('display_errors');
+  if (is_bool($disperr)) {
+    $disperr = $_noyes[$disperr];
+  }
+  if (empty($disperr)) {
+    $disperr = $_noyes[0];
+  }
+  $disperr = empty($disperr) ? $_noyes[0] : $_noyes[$disperr];
+  $rows[] = array(t('Display errors'), $disperr, NULL);
+
+  // Changing the error level returns the previous level, so we'll turn errors off then set it back as it was.
+  $current = ini_get('error_reporting');
+
+  $levels = array();
+  if ($current == E_ALL) {
+    $levels[] = 'E_ALL';
+  }
+  else {
+    foreach ($error_names as $name => $bit) {
+      if ($current && $bit) {
+        $levels[] = $name;
+      }
+    }
+  }
+  $rows[] = array(t('Error reporting'), implode(' + ', $levels), NULL);
+
+  $rows[] = array(t('Realpath_cache_size'), ini_get('realpath_cache_size'), NULL);
+  $rows[] = array(t('Upload max filesize'), ini_get('upload_max_filesize'), NULL);
+  $rows[] = array(t('Magic quotes GPC'), $_abled[ini_get('magic_quotes_gpc')], NULL);
+  $rows[] = array(t('Magic quotes runtime'), $_abled[ini_get('magic_quotes_runtime')], NULL);
+  $rows[] = array(t('Precision'), ini_get('precision'), NULL);
+  $rows[] = array(t('Register globals'), $_abled[ini_get('register_globals')], NULL);
+  $rows[] = array(t('Session cache limiter'), ini_get('session.cache_limiter'), NULL);
+  $cookie_params = session_get_cookie_params();
+  $rows[] = array(t('Session cookie domain'), !empty($cookie_params['domain']) ? $cookie_params['domain'] : t('- none -'), NULL);
+  $rows[] = array(t('Session name'), session_name(), NULL);
+  $rows[] = array(t('Session save handler'), ini_get('session.save_handler'), NULL);
+
+   /* php extensions */
+  if (extension_loaded('gd')) {
+    $gd = gd_info();
+    $rows[] = array(
+      t('GD version'),
+      $gd['GD Version'] .'<br />'
+        . t('FreeType support') .' ('. $_abled[$gd['FreeType Support']] .'), '
+        . t('Jpg support') .' ('. $_abled[$gd['JPG Support']] .'), '
+        . t('Png support') .' ('. $_abled[$gd['PNG Support']] .')',
+      NULL,
+      );
+  }
+  else {
+    $rows[] = array(t('GD support'), t('Disabled'));
+  }
+
+  if (extension_loaded('curl')) {
+    $curl = curl_version();
+    $rows[] = array(t('CURL version'), $curl['version'], NULL);
+  }
+  else {
+    $rows[] = array(t('CURL support'), t('Disabled'), NULL);
+  }
+
+  $rows[] = array(t('Multibyte support'), $_abled[extension_loaded('mbstring')], NULL);
+  $overload = ini_get('mbstring.func_overload');
+  $oload = array();
+  if ($overload & 1) {
+    $oload[] = t('mail');
+  }
+  if ($overload & 2) {
+    $oload[] = t('string');
+  }
+  if ($overload & 4) {
+    $oload[] = t('regex');
+  }
+  $rows[] = array('Mbstring.func_overload', (empty($oload) ? t('disabled') : implode(', ', $oload)), NULL);
+  $rows[] = array(t('XML support'), $_abled[extension_loaded('xml')], NULL);
+  $rows[] = array(t('Zip support'), $_abled[extension_loaded('zip')], NULL);
+  $rows[] = array(t('Zlib support'), $_abled[extension_loaded('zlib')], NULL);
+  
+  $table['rows'] = $rows;
+
+  $fieldset = array(
+    '#title' => t('PHP Information'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    '#value' => '<div class="_architecture_subsection">'. theme('table', $table) .'</div>',
+  );
+  $output .=  theme('fieldset', array('element' => $fieldset));
+
+  return $output;
+}
+
+/**
+ *   Menu callback to produce PHPINFO page.
+ */
+function _architecture_phpinfo() {
+  phpinfo(INFO_GENERAL | INFO_CONFIGURATION | INFO_ENVIRONMENT);
+  return;
+}
+
+/**
+ *   Produce the database tables overview and give overall size info
+ *
+ *  Parameters:
+ *    none
+ *
+ *  Return: HTML string
+ */
+function _architecture_database_overview($optimize_tables=FALSE, $show_index=FALSE) {
+  global $base_url, $databases;
+
+// $databases may be an array if using multiple databases.
+  if (is_array($databases)) {
+    foreach ($databases as $key => $value) {
+    $dbname = $key;
+       // Switch databases
+    db_set_active($key);
+    $fieldset = array(
+      '#title' => $dbname,
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+      '#value' => '<div class="_architecture_subsection">'. __architecture_database($dbname, $value, $optimize_tables, $show_index) .'</div>',
+      );
+    $output .=  theme('fieldset', array('element' => $fieldset));
+    }
+     // Return to default database
+    db_set_active('default');
+  }
+  else {
+    $fieldset = array(
+      '#title' => t('Database Information'),
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+      '#value' => __architecture_database('database', $databases, $optimize_tables, $show_index),
+      );
+    $output .=  theme('fieldset', array('element' => $fieldset));
+  }
+  return $output;
+}
+
+// Format the database information.
+// This was split out when I was informed that the $databases variable could be an array.
+function __architecture_database($actdb, $databases, $optimize_tables=FALSE, $show_index=FALSE) {
+  global $base_url;
+
+  $rows = array();
+  $header = array();
+
+  $db_types = array(
+    'mysql' => 'MySQL',
+    'mysqli' => 'MySQLi',
+    'pgsql' => 'Postgres',
+    );
+
+  $output .= '<table cellpadding="5"><tr>';
+
+  $output .= '<td valign="top">';
+  $output .= '<h5>'. t('Overview') ."</h5>";
+  $database_type = $db_types[ $databases[$actdb]['driver'] ];
+  $database_version = Database::getConnection()->version();
+  $rows[] = array(t('Database type'), isset($database_type) ? $database_type : t('Unknown'));
+  $vers = isset($database_version) ? $database_version : t('Unknown');
+  $rows[] = array(t('Version'), l($vers, 'admin/reports/status/sql'));
+
+  $db = $databases[$actdb];
+
+// Don't show password
+  $db['password'] = str_repeat('&bull;', strlen($db['password']));
+  $dbrows = array();
+  foreach ($db as $key => $value) {
+    $dbrows[] = array($key, $value);
+  }
+  $rows[] = array(t('Database URL'), theme('table', array('rows' => $dbrows)));
+
+  $rows[] = array(t('Base URL'), $base_url);
+  $rows[] = array(t('Database prefix'), empty($db_prefix) ? '- none -' : $db_prefix);
+  if ($database_type == 'mysql' || $database_type == 'mysqli') {
+    $grants = db_query('SHOW GRANTS');
+    $privileges = trim(str_replace('GRANT', ' ', substr($grants, 0, strpos($grants, ' ON'))));
+    $rows[] = array(t('Privileges'), array('data' => $privileges, 'colspan' => 5));
+  }
+
+  $output .= theme('table', array('header' => $header, 'rows' => $rows));
+  $output .= "</td>";
+
+  if ($database_type == 'pgsql') {
+    $output .= "</tr></table>";
+    return $output;
+  }
+
+  // Check if we have a version of MySql that supports the variable and status checks
+  // TODO: Can Postgres do something similar?
+  if (($database_type == 'mysql' && version_compare($database_version, '4.1.0', '>='))
+    || $database_type == 'mysqli') {
+
+    // The next two things are done as lists to
+    //   a) simplify building the query,
+    //   b) create the possibility of future settings page selection.
+
+    // Get selected variables from the database.
+    $variables_list = array(
+      'character_set_database',
+      'character_set_results',
+      'collation_connection',
+      'collation_database',
+      'collation_server',
+      'have_dynamic_loading',
+      'have_innodb',
+      'have_isam',
+      'have_query_cache',
+      'have_raid',
+      'max_connections',
+      'query_cache_size',
+      'query_cache_type',
+      );
+    $output .= __architecture_dbvars_list('VARIABLES', t('Selected Variables'), $variables_list, $database_version);
+
+    // Get selected status information from the database.
+    $variables_list = array(
+      'Qcache_free_memory',
+      'Qcache_hits',
+      'Qcache_not_cached',
+      'Qcache_queries_in_cache',
+      'Max_used_connections',
+      'Threads_running',
+      'Threads_cached',
+      'Threads_connected',
+      'Threads_created',
+      );
+    $output .= __architecture_dbvars_list('STATUS', t('Selected Status'), $variables_list, $database_version);
+
+    $output .= "</tr></table>  ";
+  } /* end MySql check */
+
+  // Do the table status section.
+  $result = db_query("SHOW TABLE STATUS");
+
+  // I used a class to align fields rather than 'align' because the some themes override 'align' in headers.
+  $statrpt = "  <table><thead><tr>";
+  $statrpt .= '<th>'. t('Table') .'</th>'
+    .'<th>'. t('Engine') .'</th>'
+    .'<th>'. t('Version') .'</th>'
+    .'<th>'. t('Row Format') .'</th>'
+    .'<th class="_architecture_right">'. t('Rows') .'</th>'
+    .'<th class="_architecture_right">'. t('Data Length') .'</th>'
+    .'<th class="_architecture_right">'. t('Index Length') .'</th>'
+    .'<th class="_architecture_right">'. t('Overhead') .'</th>'
+    .'<th class="_architecture_right">'. t('Operation') .'</th>'
+    .'</tr></thead><tbody>';
+  $datalen = 0;
+  $indexlen = 0;
+  $overhead = 0;
+  $row_count = 0;
+  $rows = 0;
+  $row_classes = array('even', 'odd');
+
+  foreach ($result as $table) {
+    ++$rows;
+    $row_class = $row_classes[$rows & 1];
+    $row_count += $table->Rows;
+    $datalen += $table->Data_length;
+    $indexlen += $table->Index_length;
+    $overhead += $table->Data_free;
+    $r = number_format($table->Rows);
+    $d = number_format($table->Data_length);
+    $i = number_format($table->Index_length);
+    // Is there some overhead?
+    if ($table->Data_free) {
+      $o = number_format($table->Data_free);
+      // Do we want to release it?
+      if ($optimize_tables) {
+        $worked = db_query('OPTIMIZE TABLE {' . $table->Name . '}');
+        if ($worked) {
+          $o .= '<br />'. t('released');
+        }
+      }
+    }
+    else { $o = NULL; }
+    $statrpt .= "  ".'<tr class="'. $row_class .'">'
+      .'<td>'. $table->Name .'</td>'
+      .'<td>'. $table->Engine .'</td>'
+      .'<td align="center">'. $table->Version .'</td>'
+      .'<td>'. $table->Row_format .'</td>'
+      .'<td class="_architecture_right">'. $r .'</td>'
+      .'<td class="_architecture_right">'. $d .'</td>'
+      .'<td class="_architecture_right">'. $i .'</td>'
+      .'<td class="_architecture_right">'. ($table->Data_free ? $o : '') .'</td>'
+      .'<td>'. l(t('Show contents'), 'admin/config/system/_architecture/table/'. $table->Name, array('title' => t("Display the contents of the '@table' table.", array('@table' => $table->Name)))) .'</td>'
+      . (empty($table->Comment) ? NULL : '</tr><tr class="'. $row_class .'"><td></td><td colspan="10"><img src="/misc/menu-collapsed.png" width="7" height="7"> <em>'. $table->Comment .'</em></td>');
+    if ($show_index) {
+      $statrpt .= '</tr><tr class="'. $row_class .'"><td></td><td valign="top" align="right"><em>'. t('Indexes') .':</em></td><td colspan="10">'. __architecture_show_index($table->Name) .'</td>';
+    }
+    $statrpt .= '</tr>';
+  } /* end while */
+  $statrpt .= '<tr><td colspan="4">&nbsp;</td>'
+             .'<td class="_architecture_right">----------</td>'
+             .'<td class="_architecture_right">----------</td>'
+             .'<td class="_architecture_right">----------</td>'
+             .'<td class="_architecture_right">----------</td>'
+             .'</tr>';
+  $statrpt .= '<tr><td colspan="4"><em>total</em></td>'
+             .'<td class="_architecture_right">'. number_format($row_count) .'</td>'
+             .'<td class="_architecture_right">'. number_format($datalen) .'</td>'
+             .'<td class="_architecture_right">'. number_format($indexlen) .'</td>'
+             .'<td class="_architecture_right">'. number_format($overhead) .'</td>'
+             .'</tr>';
+  $statrpt .=  "  </table>";
+
+  $fieldset = array(
+    '#title' => t('Table Status'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    '#value' => '<div class="_architecture_subsection">'. $statrpt .'</div>',
+    );
+  $output .=  theme('fieldset', array('element' => $fieldset));
+
+  $totsize = $datalen + $indexlen;
+  $kb = $totsize / 1024;
+  $mb = $kb / 1024;
+  $gb = $mb / 1024;
+  $units = 'KB';
+  $howmany = $kb;
+  if ($mb >= 1) {
+    if ($gb >= 1) {
+      $units = 'GB'; $howmany = $gb;
+    }
+    else  {
+      $units = 'MB'; $howmany = $mb;
+    }
+  }
+
+  $output .= t('Total database size is !num !unit', array('!num' => sprintf('%.1f', $howmany), '!unit' => $units)) .'</p>';
+  drupal_set_message(t('!count tables found in !db.', array('!count' => $rows, '!db' => $actdb)), 'status');
+
+  return $output;
+}
+
+/*
+ *  Helper function to show the index structure of a database table.
+ */
+function __architecture_show_index($table_name) {
+  $output = NULL;
+  $index_list = db_query('SHOW INDEX FROM '. $table_name);
+  $indices = array();
+  $header = array(t('Key Name'), t('Columns'), t('Collation'), t('Cardinality'));
+  foreach ($index_list as $index) {
+    if ($index->Seq_in_index == 1) {
+      $indices[$index->Key_name] = array(
+        'name' => $index->Column_name . ($index->Sub_part ? ' ('. $index->Sub_part .')' : NULL),
+        'collation' => $index->Collation,
+        'count' => $index->Cardinality,
+        );
+    }
+    else {
+      $indices[$index->Key_name]['name'] .= ', '. $index->Column_name . ($index->Sub_part ? ' ('. $index->Sub_part .')' : NULL);
+    }
+  }
+  if (count($indices)) {
+    $rows = array();
+    foreach ($indices as $key_name => $values) {
+      $rows[] = array($key_name,
+        $values['name'],
+        array('data' => $values['collation'], 'align' => 'center'),
+        array('data' => $values['count'], 'align' => 'center')
+        );
+    }
+    return theme('table', array('header' => $header, 'rows' => $rows));
+  }
+  else {
+    return '<span class="admin-missing">No index found.</span> '. __architecture_img_warning();
+  }
+}
+
+/**
+ *   Helper function for database variable list
+ */
+function __architecture_dbvars_list($type, $title, $variables_list, $db_vers) {
+  if (count($variables_list)) {
+    $rows = array();
+    $output .= '<td valign="top">';
+    $output .= '<h5>'. $title ."</h5>";
+  $show = 'SHOW '. $type;
+  $vers = explode('.', $db_vers);
+  switch ($vers[0]) {
+    case 4:
+      foreach ($variables_list as $key => $name) {
+          $list = $show ." LIKE '". $name ."'";
+          $result = db_query($list)->fetchAssoc();
+          foreach ($result as $data) {
+            $rows[] = array($data['Variable_name'], $data['Value']);
+          }
+    } /* end foreach */
+        $output .= theme('table', array('header' => $header, 'rows' => $rows));
+        $output .= "</td>  ";
+    break;
+
+    case 5:
+        $list = $show ." WHERE Variable_Name LIKE '". implode("' OR Variable_Name LIKE '", $variables_list) ."'";
+        $result = db_query($list)->fetchAssoc();
+        foreach ($result as $data) {
+          $rows[] = array($data['Variable_name'], $data['Value']);
+        }
+        $output .= theme('table', array('header' => $header, 'rows' => $rows));
+        $output .= "</td>  ";
+    break;
+
+      default:
+      drupal_set_message('Site Documentation: Unknown database version'. $vers[0], 'error');
+
+  } /* end switch */
+  } /* end count variables */
+  return $output;
+}
+
+/**
+ *   Function to display table contents.
+ *
+ *   @param:
+ *     $table - table name to show.
+ *     $rows_per_page - how many rows to format per page. Defaults to 20.
+ *
+ *   @return: HTML string
+ */
+function _architecture_show_table($table = NULL, $rows_per_page = 20) {
+  if (!$table || !db_table_exists($table)) {
+    drupal_set_message(t('You must supply a valid database table name.'), 'error');
+    drupal_access_denied();
+  }
+
+  // We get the first (or only) part of the Primary key to be added to the sort sequence.
+  $result = db_query("SHOW INDEX FROM {$table}")->fetchAssoc();
+  $x = $result;
+  if ($x === FALSE) {
+    drupal_set_message(t("The '@table' table has no index defined. This is probably normal.", array('@table' => $table)), 'status');
+    $first_key = NULL;
+  }
+  else {
+    $first_key = $x['Column_name'];
+  }
+
+  drupal_set_title(t('@table Table Contents', array('@table' => ucwords($table))));
+  $output = '<p>'. t('Click on a column title to sort by that column.') .'</p><br/>';
+  $rows = array();
+
+  // Now we get the column names from the table and build the header.
+  $header = array();
+  $result = db_query("SHOW COLUMNS FROM {$table}")->fetchAssoc();
+
+  foreach ($result as $col_desc) {
+    $header[] = array(
+      'data' => ucwords(str_replace('_', ' ', $col_desc['Field'])),
+      'field' => '`'. $col_desc['Field'] .'`',
+      );
+  }
+
+  // Get the data rows from the table.
+  $select = "SELECT * FROM {$table}";
+  // Set it up so that the user can sort on any column, but the primary key will always be the last value to sort on.
+  $select .= tablesort_sql($header) . ($first_key ? (', '. $first_key .' ASC') : NULL);
+  // Do the query so that we can page the data.
+  $result = pager_query($select, $rows_per_page);
+
+  while ($row = db_fetch_array($result)) {
+    $line = array();
+    foreach ($row as $key => $value) {
+      // We use check_plain for security.
+      $line[] = check_plain($value);
+    }
+    $rows[] = $line;
+  }
+
+  // Build the displayable table.
+  $output .= theme('table', array('header' => $header, 'rows' => $rows));
+  $output .= theme('pager', $rows_per_page);
+  return $output;
+}
+
+/**
+ *   Produce the modules list.
+ *
+ *  Parameters:
+ *    none
+ *
+ *  Return: HTML string
+ */
+function _architecture_get_modules($exclude_disabled=FALSE, $sort_order=0) {
+  $output = '';
+  $rows = array();
+
+  $module = array();
+  $files = system_rebuild_module_data();
+  $sortkey = array();
+  // Set some default package stuff for Drupal.
+  $package_list = array('Core - required', 'Core - optional');
+  $package_path = array('modules/ ', 'modules/ ');
+
+  foreach ($files as $filename => $file) {
+    $name = $file->info['name'];
+    $level = NULL;
+
+    $package = empty($file->info['package']) ? t('Other') : ucfirst($file->info['package']);
+    $project = empty($file->info['project']) ? ucfirst($file->name) : ucfirst($file->info['project']);
+    $key = array(NULL, NULL, $name);
+
+    // The filename is something like sites/all/modules/package/contrib/project/project.module.
+    // For the path sorting option, we want the part before "package" as key[0],
+    // and the part after "package" ("contrib/") in key[1].
+    // "project.module" is in 'basename' already.
+    // So let's start by breaking the filename up into pieces.
+    $pieces = explode('/', $file->filename);
+    // We don't need the last array element (project.module).
+    unset($pieces[count($pieces) - 1]);
+
+    // Check for what kind of package it is.
+    if ($package == t('Other') || $project == 'Drupal') {
+      // 'Special' packages. Remove the last piece ("project/").
+      unset($pieces[count($pieces) - 1]);
+      // We add a blank to the end because 'sort' acts funny.
+      $key[0] = implode('/', $pieces) .'/ ';
+    }
+    else {
+      // 'Normal' packages.
+      $where = array_search($package, $pieces);
+      if ($where === FALSE) {
+        // If "package" is not part of the name, just pull the "project" part off.
+        unset($pieces[count($pieces) - 1]);
+        $key[0] = implode('/', $pieces) .'/ ';
+      }
+      else {
+        // "Package" is part of the name, split the keys up.
+        $key[0] = implode('/', array_slice($pieces, 0, $where)) .'/ ';
+        $key[1] = implode('/', array_slice($pieces, $where + 1)) .'/';
+      }
+    }
+
+    $where = array_search($package, $package_list);
+    if ($where === FALSE) {
+      $package_list[] = $package;
+      $package_path[] = $key[0];
+    }
+    else {
+      // Package already in list.
+      if ($package_path[$where] != $key[0] && $package != t('Other')) {
+        // The path is different from what we found earlier.
+        // One may be a substring of the other - that's okay, but save the shorter one.
+        if ((strpos($package_path[$where], rtrim($key[0])) === FALSE && strpos($key[0], rtrim($package_path[$where])) === FALSE) || ($project == 'Drupal')) {
+          if ($project == 'Drupal') {
+            $level = 'error';
+          }
+          else {
+            $level = 'status';
+          }
+          drupal_set_message(t("'!name' for the '!pkg' package was found in '!found' but a previous module was in '!prior'.", array('!name' => $name, '!pkg' => $package, '!found' => $key[0], '!prior' => $package_path[$where])), $level);
+        }
+        else {
+          // Resave the shorter one.
+          if (strlen($package_path[$where]) < strlen($key[0])) {
+            $package_path[$where] = $key[0];
+          }
+        }
+      }
+    }
+
+    $module[$name] = array(
+      'version' => $file->info['version'],
+      'basename' => $file->basename,
+      'filename' => $file->filename,
+      'path' => $key[0],
+      'contrib_path' => $key[1],
+      'package' => $package,
+      'project' => $project,
+      'dependencies' => $file->info['dependencies'],
+      'dependents' => $file->info['dependents'],
+      'description' => $file->info['description'],
+      'status' => $file->status,
+      'level' => $level,
+      );
+
+    // Build a parallel array to sort with.
+    $separator = '|';
+    switch ($sort_order) {
+      case 0:  // package, project, module
+        $key = array($module[$name]['package'], $module[$name]['project'], $name);
+        break;
+
+      case 1:  // path, module
+        // Keys already set.
+        break;
+
+      default:  // This should never happen.
+        drupal_set_message(t('Unrecognized sort order.'), 'error');
+        $key = array($module[$name]['package'], $module[$name]['project'], $name);
+    }
+    $sortkey[] = implode('|', $key);
+
+    $dependencies = array();
+    // Check for missing dependencies.
+    if (is_array($file->info['dependencies'])) {
+      foreach ($file->info['dependencies'] as $dependency) {
+        if (!isset($files[$dependency]) || !$files[$dependency]->status) {
+          if (isset($files[$dependency])) {
+            $dependencies[] = $files[$dependency]->info['name'] .'<span class="admin-disabled">('. t('disabled') .')</span>';
+          }
+          else {
+            $dependencies[] = drupal_ucfirst($dependency) .'<span class="admin-missing">('. t('missing') .')</span>';
+            $disabled[] = $filename;
+          }
+        } /* end if !isset */
+        else {
+          $dependencies[] = $files[$dependency]->info['name'] .'<span class="admin-enabled">('. t('enabled') .')</span>';
+        }
+      }  /* end foreach depend */
+    } /* end if isarray */
+
+    // Un-array dependencies.
+    if (!empty($dependencies)) {
+      $module[$name]['dependencies'] = implode(', ', $dependencies);
+    }
+
+    // Un-array enabled dependents.
+    if (!empty($module[$name]['dependents'])) {
+      $module[$name]['required'] = implode(', ', $module[$name]['dependents']);
+    }
+  } /* end foreach files */
+
+  $header = array(
+    t('Name'),
+    t('Version'),
+    t('Status'),
+    t('Project / Package'),
+    t('Description'),
+    t('Required By'),
+    t('Depends On'),
+    );
+  drupal_set_message(t('!count modules found.', array('!count' => count($module))), 'status');
+  $disabled_count = 0;
+  $previous = NULL;
+
+  // Order it by project, package, module name.
+  sort($sortkey);
+
+  foreach ($sortkey as $key => $value) {
+    $keys = explode('|', $value);
+    $name = $keys[count($keys) - 1];
+
+    if ($keys[0] != $previous) {
+      if (count($rows) > 0) {
+        $fieldset = array(
+          '#title' => $previous,
+          '#collapsible' => TRUE,
+          '#collapsed' => TRUE,
+          '#value' => '<div class="_architecture_subsection">'. theme('table', array('header' => $header, 'rows' => $rows)) .'</div>',
+          );
+        $output .=  theme('fieldset', array('element' => $fieldset));
+      }
+      $previous = $keys[0];
+      $rows = array();
+    }
+
+    if (!$exclude_disabled || $module[$name]['status']) {
+      $path = $module[$name]['path'];
+      if ($module[$name]['level']) {
+      $path = '<span class="admin-missing">'. $path .'</span>';
+      }
+      $rows[] = array(
+        $name,
+        $module[$name]['version'],
+        $module[$name]['status'] ? 'Enabled' : 'Disabled',
+        '<small>'. $module[$name]['project'] .'<br />'. $module[$name]['package'] .'<br />'. $path .'</small>',
+        '<small>'. $module[$name]['description'] .'</small>',
+        $module[$name]['required'],
+        $module[$name]['dependencies'],
+        );
+    } // end if exclude disabled
+    else {
+      ++$disabled_count;
+    }
+
+  } /* end foreach sortkey */
+  // Flush the last set.
+  if (count($rows) > 0) {
+    $fieldset = array(
+      '#title' => $previous,
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+      '#value' => '<div class="_architecture_subsection">'. theme('table', array('header' => $header, 'rows' => $rows)) .'</div>',
+      );
+    $output .=  theme('fieldset', array('element' => $fieldset));
+  }
+
+  if ($exclude_disabled) {
+    $output .= '<p>'. t('!count disabled modules excluded.', array('!count' => $disabled_count)) .'</p>';
+  }
+  return $output  ;
+}
+
+/**
+ *   Produce the Themes lists
+ *
+ *  Parameters:
+ *    Which type of row to return
+ *      theme  - get themes list
+ *
+ *  Return: HTML string
+ */
+function _architecture_get_system($type=NULL) {
+  if (!$type) {
+    return '<p>'. t('No system table type specified.') .'</p>';
+  }
+  $status = array('Disabled', 'Enabled');
+
+  $string = ucfirst(strtolower($type));
+
+  // This ORDER BY makes the list come out by directory the entry comes from.
+  $result = db_query('SELECT s.name, s.filename, s.status FROM {system} s WHERE s.type = :type ORDER BY s.status DESC, s.name ASC', array(':type' => $type))->fetchAll();
+  $header = array($string, t('Path'), t('Status'));
+  $rows = array();
+  foreach ($result as $mod) {
+    $rows[] = array(
+      $mod->name,
+      $mod->filename,
+      $status[$mod->status],
+      );
+  }
+  if (!empty($rows)) {
+    drupal_set_message(t('!rows !type found.', array('!rows' => count($rows), '!type' => $string)), 'status');
+    $output .=  theme('table', array('header' => $header, 'rows' => $rows));
+  }
+  else {
+    $output .= t('No entries found! Very curious.');
+  }
+  return $output  ;
+}
+
+/**
+ *   Produce the blocks list
+ *
+ *  Parameters:
+ *    $warn - TRUE / FALSE to produce orphan warning message.
+ *    $delete - TRUE / FALSE to delete orphans.
+ *
+ *  Return: HTML string
+ */
+function _architecture_get_blocks($warn=TRUE, $delete=FALSE) {
+  global $databases;
+  
+  $db_type = $databases[$actdb]['driver'];
+
+  
+  $status = array(t('disabled'), t('enabled'));
+  $viz = array(t('Show except'), t('Show only'), t('Php'));
+  $del = NULL;
+
+  // Check if the table is missing an index.
+  switch ($db_type) {
+    case 'mysql':
+    case 'mysqli':
+      $indexes = db_query('SHOW INDEX FROM {block}');
+      break;
+
+    default:
+      $indexes = FALSE;
+  }
+  if ($indexes == FALSE) {
+    $index_msg = ' '. t('Performance may be improved by adding an index. See <a href="!url">this discussion</a>.', array('!url' => 'http://drupal.org/node/164532'));
+    $msg_level = 'warning';
+  }
+  else {
+    $index_msg = NULL;
+    $msg_level = 'status';
+  }
+
+  // Get blocks from the Blocks table.
+  $result = db_query('SELECT b.module, b.delta, b.theme, b.status, b.weight, b.region, b.custom, b.visibility, b.pages, b.title FROM {block} b ORDER BY b.theme, b.module, b.delta')->fetchAll();
+
+  $header = array(
+    t('Theme'),
+    t('Module'),
+    array('data' => t('Delta'), 'align' => 'center'),
+    t('Name') .' /<br/>'. t('Title'),
+    t('Status'),
+    array('data' => t('Weight'), 'class' => '_architecture_right'),
+    t('Region'),
+    t('Roles'),
+    array('data' => t('Visibility'), 'align' => 'center'),
+    t('Pages'),
+    );
+  $output = NULL;
+
+  $rows = array();
+  $missing_theme = FALSE;
+
+  foreach ($result as $blk) {
+    $theme = $blk->theme;
+    $thm = db_query("SELECT s.status FROM {system} s WHERE s.type='theme' AND s.name = :name", array(':name' => $theme))->fetchAssoc();
+    if (!empty($thm)) {
+      $theme .= ' <span class="admin-'. $status[$thm['status']] .'">('. ucfirst($status[$thm['status']]) .')</span>';
+    }
+    else {
+      $theme .= ' <span class="admin-missing">('. t('missing') .')</span>';
+      $missing_theme = TRUE;
+      $mod_delta = "module='$blk->module' AND delta='$blk->delta'";
+      $delblk = "DELETE FROM {block} WHERE theme='". $blk->theme ."' AND ". $mod_delta .'; ';
+      if ($has_roles = db_query_range('SELECT rid FROM {block_role} WHERE '. $mod_delta, 0, 1)->fetchAll()) {
+        $delrole = 'DELETE FROM {block_role} WHERE '. $mod_delta.'; ';
+      }
+      else {
+        $delrole = NULL;
+        drupal_set_message("has_roles query returned $has_roles");
+      }
+      if ($delete) {
+        $deleted = db_query($delblk) && ($delrole ? db_query($delrole) : TRUE);
+        if ($deleted == FALSE) {
+          $theme .= ' <span class="admin-missing">('. t('NOT DELETED') .')</span>';
+        }
+        else {
+          $theme .= ' <span class="admin-disabled">('. t('DELETED') .')</span>';
+          drupal_set_message(t('Deleted block ') . $blk->theme .'/'. $blk->module .'/'. $blk->delta, 'status');
+        }
+      }
+      else {
+        $del .= $delblk . $delrole;
+      }
+    }
+    $blocks = module_invoke($blk->module, 'block', 'list');  // Get block information from module.
+
+    $w = $blk->weight ? $blk->weight : '';    // Don't show 0 weight.
+    $n = $blocks[$blk->delta]['info'];  // Get block name.
+    // If there is one, put title on next line.
+    if (!empty($blk->title)) {
+      $n .= ' /<br />'. $blk->title;
+    }
+
+    // The pages field format depends on the visibility setting
+    // 2 is php, 0 or 1 is pages list
+    $pgs = NULL;
+    if (!empty($blk->pages)) {
+      if ($blk->visibility < 2) {
+        $pt = str_replace("\r", NULL, trim(check_plain($blk->pages)));
+        $pgs = explode("\n", $pt);
+        if (is_array($pgs)) {
+          if (count($pgs) > 1) {
+            $pgs = theme('item_list', array('items' => $pgs));
+          }
+          else {
+            $pgs = $pgs[0];
+          }
+        }
+      }
+      // Visibility = 2
+      else {
+        $pgs = highlight_string($blk->pages, TRUE);
+      }
+    }
+
+    // Get the roles for the blocks.
+    $rids = db_query('SELECT br.rid, r.name FROM {block_role} br INNER JOIN {role} r ON r.rid=br.rid WHERE br.module=:module AND br.delta=:delta', array(':module' => $blk->module, ':delta' => $blk->delta))->fetchAssoc();
+    $blk_rids = array();
+    foreach ($rids as $blk_role) {
+      $blk_rids[] = $blk_role['name'];
+    }
+
+    $rows[] = array(
+      $theme,
+      $blk->module == 'block' ? 'block /<br/><small><em>'. t('see boxes') .'</em></small>' : $blk->module,
+      array('data' => $blk->delta, 'align' => 'center'),
+      $n,
+      '<span class="admin-'. $status[$blk->status] .'">'. ucfirst($status[$blk->status]) .'</span>',
+      array('data' => $w, 'class' => '_architecture_right'),
+      $blk->status ? $blk->region : '',    // no region if not enabled
+      count($blk_rids) ? '<small>'. implode(', ', $blk_rids) .'</small>' : NULL,
+      array('data' => $viz[$blk->visibility], 'align' => 'center'),
+      $pgs,
+      );
+  } /* end while */
+
+  $count = count($rows);
+  if ($count == 0) {
+    drupal_set_message(t('No Blocks found.'), 'status');
+  }
+  else {
+    drupal_set_message(t('!count Blocks found.', array('!count' => $count)) . $index_msg , $msg_level);
+    if ($index_msg) {
+      drupal_set_message(t('For example:') .' ALTER TABLE `block` ADD PRIMARY KEY(`theme`(32), `module`, `delta`)', $msg_level);
+    }
+    $output .=  theme('table', array('header' => $header, 'rows' => $rows));
+  }
+  if ($missing_theme && $warn) {
+    drupal_set_message(t('Blocks defined for non-existent theme(s)'), 'error');
+  }
+
+  if ($missing_theme && !$delete) {
+    $output .= '<p>'. $del .'</p>';
+  }
+
+  return $output  ;
+}
+
+/**
+ *   Produce the boxes (manual blocks, additional data) list.
+ *
+ *  Parameters:
+ *    $warn - TRUE / FALSE to produce orphan warning message.
+ *    $delete - TRUE / FALSE to delete orphans.
+ *
+ *  Return: HTML string
+ */
+function _architecture_get_boxes($warn=TRUE, $delete=FALSE) {
+  $result = db_query('SELECT * FROM {boxes} b')->fetchAssoc();
+  $output = NULL;
+  $orphans = FALSE;
+  $header = array(
+    array('data' => 'Bid', 'class' => '_architecture_right'),
+    t('Box Name'),
+    array('data' => t('Format'), 'class' => '_architecture_right'),
+    t('Body'),
+    );
+  $rows = array();
+  foreach ($result as $box) {
+    $info = $box['info'];
+    $check_block = db_result(db_query_range("SELECT COUNT(theme) FROM {blocks} WHERE module='block' AND delta=%d", (int)$box['bid'], 0, 1));
+    if ($check_block == 0) {
+      $orphans = TRUE;
+      $info .= '<br/><span class="admin-missing">('. t('block missing') .')</span>';
+      if ($delete) {
+        $delbox = db_query_range('DELETE FROM {boxes} WHERE bid=%d', $box['bid'], 0, 1);
+        drupal_set_message(t('Box number !bid deleted.', array('!bid' => $box['bid'])), 'status');
+      }
+    }
+
+    $rows[] = array(
+      array('data' => $box['bid'], 'class' => '_architecture_right'),
+      $info,
+      array('data' => $box['format'], 'class' => '_architecture_right'),
+      highlight_string($box['body'], TRUE),
+      );
+  } // End while.
+
+  $howmany = count($rows);
+  if ($howmany > 0) {
+    $output .= theme('table', array('header' => $header, 'rows' => $rows));
+    drupal_set_message(t('!count boxes found.', array('!count' => $howmany)), 'status');
+  }
+  if ($orphans) {
+    if ($warn) {
+      drupal_set_message('Orphan boxes found.', 'error');
+    }
+  }
+  return $output;
+}
+
+/**
+ *   Produce the node summary.
+ *
+ *  Parameters:
+ *    TRUE - include comments count.
+ *    FALSE - don't include comments count.
+ *
+ *  Return: HTML string
+ */
+function _architecture_node_summary($comment=FALSE, $show_size=99999, $max_size=99999) {
+/*   $sql = "SELECT n.nid, n.title, n.type, n.status, n.promote, n.moderate, n.sticky, length(body) AS node_len"; */
+  $sql = "SELECT n.nid, n.title, n.type, n.status, n.promote, n.sticky, length(frb.body_value) AS node_len";
+  if ($comment) {
+    $sql .= ", c.comment_count";
+  }
+  $sql .= " FROM {node} n LEFT JOIN {node_revision} nr ON nr.vid=n.vid LEFT JOIN {field_revision_body} frb ON frb.revision_id = nr.vid";
+  if ($comment) {
+    $sql .= " LEFT JOIN {node_comment_statistics} c ON c.nid=n.nid";
+  }
+
+  $result = db_query($sql)->fetchAll();
+  $counters = array();
+  $types = array();
+  $weight_detected = FALSE;
+
+  $toobig = 0;
+  $biggies = array();
+
+  foreach ($result as $node) {
+    $node_kb = $node->node_len / 1024;
+    if ($node_kb >= $show_size) {
+      $biggies[] = array(
+        l($node->title, 'node/'. $node->nid .'/edit'),
+        array('data' => number_format($node_kb, 2), 'align' => 'center'));
+    } /* end if show size */
+    if ($node_kb >= $max_size) {
+      ++$toobig;
+    }
+
+    if (!in_array($node->type, $types)) {
+      $types[] = $node->type;
+    }
+    $counters[$node->type]['type'] ++;
+    if ($node->status) {
+      ++$counters[$node->type]['published'];
+    }
+    if ($node->promote) {
+      ++$counters[$node->type]['promoted'];
+    }
+    if ($comment) {
+      $counters[$node->type]['comments'] += $node->comment_count;
+    }
+     /* check if the weight module algorithm is in use */
+    if ($node->sticky > 1 || $node->sticky < 0) {
+      _decode_sticky($node);
+      if (!$weight_detected) {
+        $weight_detected = TRUE;
+        drupal_set_message(t('Weight-encoded in sticky field has been detected.'), 'status');
+      }
+    }
+    else {
+      $node->weight = 0;  /* set unweighted if not */
+    }
+    if ($node->sticky) {
+      ++$counters[$node->type]['sticky'];
+    }
+    if ($node->weight <> 0) {
+      ++$counters[$node->type]['weight'];
+    }
+  } /* end while fetch */
+  ksort($types);
+  $header = array(
+    t('Type'),
+    array('data' => t('Count'), 'class' => '_architecture_right'),
+    array('data' => t('Published'), 'class' => '_architecture_right'),
+    array('data' => t('Promoted'), 'class' => '_architecture_right'),
+    array('data' => t('Sticky'), 'class' => '_architecture_right'),
+    array('data' => t('Weighted'), 'class' => '_architecture_right'),
+    $comment ? array('data' => t('Comments'), 'class' => '_architecture_right') : NULL,
+    );
+  $rows = array();
+  $tot = 0; $pub = 0; $pro = 0; $sti = 0; $mod = 0;
+  foreach ($types as $type) {
+    $rows[] = array(
+      $type,
+      array('data' => $counters[$type]['type'], 'class' => '_architecture_right'),
+      array('data' => $counters[$type]['published'], 'class' => '_architecture_right'),
+      array('data' => $counters[$type]['promoted'], 'class' => '_architecture_right'),
+      array('data' => $counters[$type]['sticky'], 'class' => '_architecture_right'),
+      array('data' => $counters[$type]['weight'], 'class' => '_architecture_right'),
+      $comment ? array('data' => $counters[$type]['comments'], 'class' => '_architecture_right') : NULL,
+      );
+    $tot += $counters[$type]['type'];
+    $pub += $counters[$type]['published'];
+    $pro += $counters[$type]['promoted'];
+    $sti += $counters[$type]['sticky'];
+    $wei += $counters[$type]['weight'];
+    $com += $counters[$type]['comments'];
+  } /* end foreach type */
+  $rows[] = array(
+    '',
+    array('data' => '------', 'class' => '_architecture_right'),
+    array('data' => '------', 'class' => '_architecture_right'),
+    array('data' => '------', 'class' => '_architecture_right'),
+    array('data' => '------', 'class' => '_architecture_right'),
+    array('data' => '------', 'class' => '_architecture_right'),
+    $comment ? array('data' => '------', 'class' => '_architecture_right') : NULL,
+    );
+  $rows[] = array(
+    '<em>'. t('total') .'</em>',
+    array('data' => $tot, 'class' => '_architecture_right'),
+    array('data' => $pub, 'class' => '_architecture_right'),
+    array('data' => $pro, 'class' => '_architecture_right'),
+    array('data' => $sti, 'class' => '_architecture_right'),
+    array('data' => $wei, 'class' => '_architecture_right'),
+    $comment ? array('data' => $com, 'class' => '_architecture_right') : NULL,
+    );
+  drupal_set_message(t('!count nodes found.', array('!count' => $tot)), 'status');
+  $output .= theme('table', array('header' => $header, 'rows' => $rows));
+
+  if ($toobig) {
+    $output .= '<p>'. __architecture_img_warning() .' '.
+      t('!count nodes exceed !size KB.', array('!count' => $toobig, '!size' => $max_size)) .'</p>';
+  }
+  else {
+    $output .= '<p>'. __architecture_img_ok() .' '
+      . t('No nodes exceed !size KB.', array('!size' => $max_size)) .'</p>';
+  }
+  if (!empty($biggies)) {
+    $big_head = array(t('Title'), t('Length (KB)'));
+    $fieldset = array(
+      '#title' => t('Large Nodes'),
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+      '#value' => '<div class="_architecture_subsection">'. theme('table', $big_head, $biggies) .'</div>',
+      );
+    $output .=  theme('fieldset', array('element' => $fieldset));
+  }
+
+  return $output  ;
+}
+
+// Helper module in case weight module algorithm is used.
+function _decode_sticky(&$node) {
+  $sticky = $node->sticky;     /* save value */
+  $node->sticky = ($sticky > 0) ? 1 : 0;
+  $node->weight = ($sticky > 0) ? 100 - $sticky : -100 - $sticky;
+  return;
+}
+
+/**
+ *  Produce the user roles list.
+ *
+ *  Parameters:
+ *    1) TRUE - permissions listed as unordered list
+ *       FALSE - permissions listed as stream (default)
+ *    2) TRUE - include users in roles (default)
+ *       FALSE - do not include users
+ *
+ *  Return: HTML string
+ */
+function _architecture_get_roles($list = FALSE, $users = FALSE) {
+  $result = db_query('SELECT r.rid, r.name, p.permission, p.module FROM {role} r INNER JOIN {role_permission} p ON p.rid = r.rid')->fetchAll();
+  $output = NULL;
+  $header = array(
+    array('data' => 'Rid', 'class' => '_architecture_right'),
+    t('Name'),
+    t('Permissions'),
+    t('Blocks'),
+    $users ? t('Users') : NULL,
+    array('data' => 'Module', 'class' => '_architecture_right'),
+    );
+  foreach ($result as $role) {
+    // Get which blocks they can see.
+    $bresult = db_query('SELECT b.module, b.delta FROM {block_role} b WHERE b.rid = :rid', array(':rid' => $role->rid))->fetchAll();
+    $blk_list = array();
+    foreach ($bresult as $block) {
+      $blk_list[] = $block->module .'/'. $block->delta;
+    } /* end while block */
+
+    // Get which users have this role.
+    $uresult = db_query('SELECT u.name, u.uid FROM {users_roles} r INNER JOIN {users} u ON u.uid = r.uid WHERE r.rid = :rid', array(':rid' => $role->rid))->fetchAll();
+    $user_list = array();
+    foreach ($uresult as $user) {
+      // Make the user a link.
+      $user_list[] = l($user->name .' ('. $user->uid .')', 'user/'. $user->uid);
+    }
+
+    $rows[] = array(
+      array('data' => $role->rid, 'class' => '_architecture_right'),
+      $role->name,
+      $list ? theme('item_list', array('items' => explode(', ', $role->permission))) : $role->permission,
+      $list ? theme('item_list', array('items' => $blk_list)) : implode(', ', $blk_list),
+      $users ? ($list ? theme('item_list', array('items' => $user_list)) : implode(', ', $user_list)) : NULL,
+      array('data' => $role->module, 'class' => '_architecture_right'),
+      );
+  } /* end while role */
+
+  $howmany = count($rows);
+  if ($howmany > 0) {
+    drupal_set_message(t('!count Roles found.', array('!count' => $howmany)), 'status');
+    $output = theme('table', array('header' => $header, 'rows' => $rows));
+  }
+  return $output  ;
+}
+
+/**
+ *  Produce the system variables list.
+ *
+ *  Parameters:
+ *    None
+ *
+ *  Return: HTML string
+ */
+function _architecture_get_variables() {
+  // $conf is the cached array of system variables
+  global $conf;
+
+  // Save it so we can sort it
+  $vars = $conf;
+  ksort($vars);
+
+  drupal_set_message(count($vars) . t(' system variables found.'), 'status');
+
+  $header = array(t('Name'), t('Value'));
+  $rows = array();
+
+  foreach ($vars as $name => $value) {
+    $rows[] = array($name, __architecture_handle_data($value));
+  } /* end foreach */
+
+  $output .= theme('table', array('header' => $header, 'rows' => $rows));
+  return $output  ;
+}
+
+// Helper function for traversing an array.
+// Since some arrays may contain arrays, this function can be called recursively.
+// Also handles objects.
+function __architecture_handle_data($text) {
+  // Take care of simple data types first.
+  if (is_string($text) || is_numeric($text) || is_float($text)) {
+//    return filter_xss($text);
+    return check_plain($text);
+  }
+
+  if (is_NULL($text)) {
+    return t('NULL');
+  }
+
+  if (is_bool($text)) {
+    return $text ? t('True') : t('False');
+  }
+
+  // That leaves arrays and objects.
+  if (is_array($text)) {
+    $rows = array();
+    foreach ($text as $key => $value) {
+      $rows[] = array($key, __architecture_handle_data($value));
+    }
+    return theme('table', array('header' => array(t('Key'), t('Value')), 'rows' =>$rows));
+  }
+
+  if (is_object($text)) {
+    $rows = array();
+    // turn it into an array and handle like one.
+    $data = (array) $text;
+    foreach ($data as $key => $value) {
+      $rows[] = array($key, __architecture_handle_data($value));
+    }
+    return theme('table', array('header' => array(t('Method'), t('Value')), 'rows' => $rows));
+  }
+
+//  return gettype($text);
+
+  // Hmm, what could it be?
+  $value = '<strong>'. gettype($array[$name]) .'</strong>';
+  drupal_set_message('Tell Nancy I found a '. gettype($array[$name]) .' in the variables.', 'error');
+  return t('Unknown data type');
+}
+
+/**
+ * Produce the site-wide contacts (email) list.
+ *
+ *  Parameters:
+ *    None
+ *
+ *  Return: HTML string
+ */
+function _architecture_get_contacts() {
+  $output = NULL;
+  if (!module_exists('contact')) {
+    return '<p>Contact'. t(' module not enabled') .'</p>';
+  }
+  $sql = 'SELECT * FROM {contact} c ORDER BY c.selected DESC, c.cid ASC';
+  $result = db_query($sql)->fetchAll();
+  $header = array(
+    array('data' => 'Cid', 'class' => '_architecture_right'),
+    t('Category'),
+    t('Recipients'),
+    array('data' => t('Weight'), 'class' => '_architecture_right'),
+    array('data' => t('Selected'), 'align' => 'center'),
+    );
+  $rows = array();
+  foreach ($result as $contact) {
+    $recips = explode(',', $contact->recipients);
+    if (count($recips) > 1) {
+      $recip_list = theme('item_list', array('items' => $recips));
+    }
+    else { $recip_list = $contact->recipients; }
+    $rows[] = array(
+      array('data' => $contact->cid, 'class' => '_architecture_right'),
+      $contact->category,
+      $recip_list,
+      array('data' => $contact->weight, 'class' => '_architecture_right'),
+      array('data' => $contact->selected ? 'yes' : 'no', 'align' => 'center'),
+      );
+  } /* end while role */
+
+  $howmany = count($rows);
+  if ($howmany > 0) {
+    drupal_set_message(t('!count Contacts found.', array('!count' => $howmany)), 'status');
+    $output = theme('table', array('header' => $header, 'rows' => $rows));
+  }
+  return $output  ;
+}
+
+/**
+ * Produce the user profile fields list.
+ *
+ *  Parameters:
+ *    string - limits the list to only this category
+ *
+ *  Return: HTML string
+ */
+function _architecture_profile_fields() {
+  if (!module_exists('profile')) {
+    return '<p>Profile '. t('module not enabled') .'</p>';
+  }
+  $output = NULL;
+
+  // Allow an optional param to limit the display to a specific category.
+  if (func_num_args() > 0) {
+    $category = func_get_arg(0);
+  }
+
+  $no_yes = array(t('No'), t('Yes'));
+  $viz = array(t('Hidden'), t('Private'), t('Profile'), t('Public'));
+  // This is to save display space.
+  $short_type = array(
+    'textfield' => t('Text'),
+    'textarea' => t('Area'),
+    'URL' => t('URL'),
+    'checkbox' => t('Check'),
+    'selection' => t('select'),
+    'list' => t('Free'),
+    'date' => t('Date'),
+    );
+
+  $header = array(
+    array('data' => t('Fid'), 'class' => '_architecture_right'),
+    t('Title'),
+    t('Name'),
+    t('Explanation'),
+    t('Page'),
+    t('Type'),
+    array('data' => t('Weight'), 'class' => '_architecture_right'),
+    array('data' => t('Visiblity'), 'align' => 'center'),
+    array('data' => t('Required'), 'align' => 'center'),
+    array('data' => t('Register'), 'align' => 'center'),
+    array('data' => t('Auto complete'), 'align' => 'center'),
+    t('Options'),
+    );
+  if ($category) {
+    $where = " WHERE p.category='$category'";
+  }
+  else {
+    $where = ' ';
+  }
+  $result = db_query('SELECT * FROM {profile_fields} p'. $where .' ORDER BY p.category, p.weight, p.name')->fetch();
+  $save_cat = '';
+
+  foreach ($result as $field) {
+    if ($field->category <> $save_cat) {
+      // Flush previous rows, if any.
+      if (!empty($save_cat)) {
+        $output .= theme('table', array('header' => $header, 'rows' => $rows));
+      }
+      $output .= '<h4>'. t('Category: ') . $field->category .'</h4>';
+      $save_cat = $field->category;
+      $rows = array();
+    }
+    $rows[] = array(
+      array('data' => $field->fid, 'class' => '_architecture_right'),
+      $field->title,
+      $field->name,
+      $field->explanation,
+      $field->page,
+      $short_type[$field->type],
+      array('data' => $field->weight, 'class' => '_architecture_right'),
+      array('data' => $viz[$field->visibility], 'align' => 'center'),
+      array('data' => $no_yes[$field->required], 'align' => 'center'),
+      array('data' => $no_yes[$field->register], 'align' => 'center'),
+      array('data' => $no_yes[$field->autocomplete], 'align' => 'center'),
+      $field->options,
+      );
+  } /* end while field */
+
+  $howmany = count($rows);
+  drupal_set_message(t('!count Profile fields found.', array('!count' => $howmany)), 'status');
+  if ($howmany > 0) {
+    $output .= theme('table', array('header' => $header, 'rows' => $rows));
+  }
+  return $output;
+}
+
+/**
+ * Produce the URL Alias list and checks for orphans.
+ *
+ *  Parameters:
+ *    string - limits the list to only this category
+ *
+ *  Return: HTML string
+ */
+function _architecture_url_alias() {
+  if (!module_exists('path')) {
+    return '<p>Path '. t('module not enabled') .'</p>';
+  }
+  $output = NULL;
+  $rows = array();
+  $last_src = NULL;
+  $problems = 0;
+  // For reverse checking.
+  $node_alias = array();
+
+  $header = array(
+    array('data' => t('pid'), 'class' => '_architecture_right'),
+    t('Source'),
+    t('Destination'),
+    t('Notes'),
+    t('Operation'),
+    );
+  $result = db_query('SELECT u.pid, u.source, u.alias FROM {url_alias} u ORDER BY u.source, u.alias')->fetchAll();
+kpr($result);
+  foreach ($result as $path) {
+    $notes = array();
+    $ops = array();
+    if ($last_src == $path->source) {
+      $notes[] = t('duplicate source');
+    }
+    else { $last_src = $path->source; }
+
+    // Ignore "special" paths.
+    if (substr($path->source, 0, 1) != '<') {
+      $p = explode('/', $path->source);
+      $edit = 'edit';
+    // So pseudo HTML shows (like <front>)
+      $source = check_plain($path->source);
+
+      // Check first part of path.
+      switch ($p[0]) {
+
+        case 'node':
+          // Missing nid?
+          if (empty($p[1])) {
+            $notes[] = '&lt;front&gt;?';
+            break;
+          }
+          $node_exists = db_query('SELECT COUNT(n.nid) FROM {node} n WHERE n.nid = :nid', array(':nid' => $p[1]))->fetchField();
+          if ($node_exists) {
+            $source = $path->source;
+            $ops[] = l(t('edit node'), $path->source .'/edit');
+          }
+          else {
+            $notes[] = '<span class="admin-missing">'. t('missing node') .'</span>';
+            $edit = 'delete';
+          }
+          $node_alias[$p[1]] = TRUE;
+          break;
+
+        case 'taxonomy':
+          $taxo_exists = db_query('SELECT COUNT(td.name) FROM {term_data} td WHERE td.tid = :tid', array(':tid' =>$p[2]))->fetchField();
+          if (!$taxo_exists) {
+            $notes[] = '<span class="admin-missing">'. t('missing taxonomy term') .'</span>';
+          }
+          break;
+
+        case 'faq':   /* same as taxo/term */
+          $taxo_exists = db_query('SELECT COUNT(td.name) FROM {term_data} td WHERE td.tid = :tid', array(':tid' => $p[1]))->fetchField();
+          if (!$taxo_exists) {
+            $notes[] = '<span class="admin-missing">'. t('missing faq taxonomy term') .'</span>';
+          }
+          break;
+
+        case 'user':
+          $node_exists = db_query('SELECT COUNT(u.uid) FROM {users} u WHERE u.uid = :uid', array(':uid' => $p[1]))->fetchField();
+          if (!$node_exists) {
+            $notes[] = '<span class="admin-missing">'. t('missing user') .'</span>';
+          }
+          break;
+
+        case 'contact':  /* nothing to do */
+          break;
+
+        default:
+          if (module_exists($p[0])) {
+            $notes[] = '<span class="admin-enabled">'. t('ask the !name module', array('!name' => $p[0])) .'</span>';
+          }
+          else {
+            $notes[] = '<span class="admin-missing">'. t('unhandled path type') .'</span>';
+          }
+
+      } /* end switch $p(0) */
+    } /* end if not < */
+
+    $problems += count($notes);
+    $ops[] = l($edit .' '. t('path'), 'admin/build/path/'. $edit .'/'. $path->pid);
+    $rows[] = array(array('data' => $path->pid, 'class' => '_architecture_right'),
+                    $source,
+                    $path->alias,
+                    implode(', ', $notes),
+                    implode(', ', $ops),
+                );
+  } /* end while path */
+
+  $howmany = count($rows);
+  if ($howmany > 0) {
+    $output .= theme('table', array('header' => $header, 'rows' => $rows));
+  }
+
+  //  Now run through the nodes to see if they have an alias.
+  $rows = array();
+
+  $result = db_query('SELECT n.nid, n.title FROM {node} n ORDER BY n.nid');
+  foreach ($result as $node) {
+    // Does node NOT have an alias?
+    if (!isset($node_alias[$node->nid])) {
+      $rows[] = array($node->title, l(t('edit'), 'node/'. $node->nid .'/edit'));
+    }
+  }
+
+  if (count($rows) > 0) {
+    $fieldset = array(
+      '#title' => t('Nodes without URL Alias'),
+      '#collapsible' => TRUE,
+      '#collapsed' => count($rows) > 10,
+      '#value' => '<div class="_architecture_subsection">'. theme('table', array('header' => array(t('Title'), t('Operation')), 'rows' => $rows)) .'</div>',
+      );
+    $output .=  '<br/>'. theme('fieldset', array('element' => $fieldset));
+  }
+
+  $msg = t('!count URL Aliases found', array('!count' => $howmany));
+  if ($problems) {
+    $msg .= ' '. t('with !problems notes.', array('!problems' => $problems)) .' ';
+  }
+  else {
+    $msg .= '.';
+  }
+  if (count($rows)) {
+    $msg .= ' '. t('!count nodes without aliases found.', array('!count' => count($rows)));
+  }
+  drupal_set_message($msg, 'status');
+
+  return $output  ;
+}
+
+function _architecture_term_count_nodes($tid = 0, $type = NULL) {
+  if ($type) {
+    $count = db_result(db_query(db_rewrite_sql("SELECT COUNT(n.nid) FROM {taxonomy_index} t INNER JOIN {node} n ON t.nid = n.nid WHERE t.tid = %d AND n.status = 1 AND n.type = '%s'"), $tid, $type));
+  }
+  else {
+    $count = db_result(db_query(db_rewrite_sql('SELECT COUNT(n.nid) FROM {taxonomy_index} t INNER JOIN {node} n ON t.nid = n.nid WHERE t.tid = %d AND n.status = 1'), $tid));
+  }
+  return $count;
+}
+
+/*
+ *  This function gets the Input Format and Filter information.
+ */
+function _architecture_filters() {
+  $output = "  <h2>". t('Filters and Input Formats') .'</h2>';
+
+  // Find out which modules provide filters.
+  $filter_modules = module_implements('filter', TRUE);
+  foreach ($filter_modules as $module) {
+    $list = module_invoke($module, 'filter', 'list');
+    foreach ($list as $delta => $name) {
+      $filter_list[$module][$delta] = array(
+        'name' => $name,
+        'used' => array(),
+        );
+    }
+  }
+
+  $output .= "  <h4>". t('Input Formats') ."</h4>  ";
+
+  $headers = array(t('Format'), t('Name'), t('Roles'), t('Cache'), t('Filters'));
+  
+  // Overview of all formats.
+  $formats = filter_formats();
+  $fallback_format = filter_fallback_format();
+  $filters = filter_get_filters();
+
+  foreach ($formats as $id => $format) {
+    $cell_format = array(
+      'data' => $format->format,
+      'valign' => 'top',
+    );
+    
+    // Check whether this is the fallback text format.
+    // This format is available to all roles.
+    if ($id == $fallback_format) {
+      $cell_name = array(
+        'data' => l(drupal_placeholder(t($format->name)), 'admin/config/content/formats/' . $format->format, array('query' => array('destination' => '/admin/reports/_architecture'), 'html' => TRUE)),
+        'valign' => 'top',
+    
+      );
+      $cell_roles = array(
+        'data' => drupal_placeholder(t('All')),
+        'valign' => 'top',
+      );
+    }
+    else {
+      $cell_name = array(
+        'data' => l(check_plain($format->name), 'admin/config/content/formats/' . $format->format, array('query' => array('destination' => '/admin/reports/_architecture'))),
+        'valign' => 'top',
+      );
+      $roles = array_map('check_plain', filter_get_roles_by_format($format));
+      $cell_roles = array(
+        'data' => $roles ? theme('item_list', array('items' => $roles)) : t('None'),
+        'valign' => 'top',
+      );
+    }
+    $cell_cache = array(
+      'data' => $format->cache ? __architecture_img_ok() : __architecture_img_warning(),
+      'align' => 'center',
+      'valign' => 'top',
+    );
+
+    $filter_header = array(t('Name (Module, Delta)'), t('Weight'));
+    $filter_rows = array();
+    $f_result = filter_list_format($format->format);
+
+    foreach ($f_result as $id =>$filter) {
+      if ($filter->status > 0) {
+        $filter_rows[] = array(
+          array(
+            'data' => $filters[$filter->name]['title'] .' ('. $filter->module .', ' . $filter->name . ')',
+          ),
+          array(
+            'data' => $filter->weight,
+            'align' => 'center',
+          ),
+        );
+      $used_in[$filter->module][$filter->name][] = $filter->format;
+
+      }      
+    }
+
+    $filter_stuff = array(
+      'data' => theme('table', array(
+          'header' => $filter_header,
+          'rows' => $filter_rows)
+      ),
+      'valign' => 'top',
+    );
+    
+    $rows[] = array($cell_format, $cell_name, $cell_roles, $cell_cache, $filter_stuff);
+  }
+
+  $output .=  theme('table', array('header' => $headers, 'rows' => $rows, 'sticky' => FALSE));
+  $output .= "<h4>". t('Available Filters') ."</h4>";
+
+  $filter_list = array();
+  foreach ($filters as $id => $filter) {
+    $filter_list[$filter['module']][$id] = $filter;
+  }
+
+  // Show usage info.
+  $list_rows = array();
+  foreach ($filter_list as $module => $deltas) {
+    $cell_module = array(
+      'data' => $module,
+      'valign' => 'top',
+    );
+    $cell_provides = array();
+    $cell_used = array();
+    foreach ($deltas as $key => $delta) {
+      $cell_delta = array(
+        'data' => $key,
+      );
+      $cell_filters = array(
+        'data' => $delta['title'],
+      );
+
+      $cell_provides[] = array($cell_delta, $cell_filters);
+
+      $cell_used[] = array(
+        array(
+          'data' => implode(', ', $used_in[$module][$key]),
+        ),
+      );
+    }
+            
+    $list_rows[] = array(
+      $cell_module,
+      theme('table', array('rows' => $cell_provides)),
+      theme('table', array('rows' => $cell_used)),
+    );
+
+  }
+  $output .= theme('table', array('header' => array(t('Module'), t('Provides'), t('Used In')), 'rows' => $list_rows));
+
+  return $output;
+}
