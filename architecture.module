@@ -470,11 +470,11 @@ function architecture_views_csv() {
         $display['machine_name'],
         $display['title'],
 
-        $display['fields'] ? implode(' ', $display['fields']) : '',
-        $display['filters'] ? implode(' ', $display['filters']) : '',
-        $display['sorts'] ? implode(' ', $display['sorts']) : '',
-        $display['relationships'] ? implode(' ', $display['relationships']) : '',
-        $display['arguments'] ? implode(' ', $display['arguments']) : '',
+        $display['fields'] ? implode(', ', $display['fields']) : '',
+        $display['filters'] ? implode(', ', $display['filters']) : '',
+        $display['sorts'] ? implode(', ', $display['sorts']) : '',
+        $display['relationships'] ? implode(', ', $display['relationships']) : '',
+        $display['arguments'] ? implode(', ', $display['arguments']) : '',
 
         $display['style'],
         $display['empty_text'],
@@ -589,32 +589,48 @@ function architecture_views($requested_views=NULL) {
       }
       $fields = $filters = $sorts = $relationships = $arguments = NULL;
       if (isset($display->display_options['fields'])) {
-        $filters = array_keys($display->display_options['fields']);
+        $fields = array_keys($display->display_options['fields']);
       }
       if (isset($display->display_options['filters'])) {
         $filters = array_keys($display->display_options['filters']);
       }
       if (isset($display->display_options['sorts'])) {
-        $filters = array_keys($display->display_options['sorts']);
+        $sorts = array_keys($display->display_options['sorts']);
       }
       if (isset($display->display_options['relationships'])) {
-        $filters = array_keys($display->display_options['relationships']);
+        $relationships = array_keys($display->display_options['relationships']);
       }
       if (isset($display->display_options['arguments'])) {
-        $filters = array_keys($display->display_options['arguments']);
+        $arguments = array_keys($display->display_options['arguments']);
       }
       // Text to display if view is empty.
       $empty = array();
-      if (isset($display->display_options['empty']) && is_array($display->display_options['empty'])) {
-        foreach ($display->display_options['empty'] as $empty_key => $empty_values) {
-          $empty[] = $empty_values['content'];
+      if (isset($display->display_options['empty'])) {
+        if (is_array($display->display_options['empty'])) {
+          // Views API 3 version of empty
+          foreach ($display->display_options['empty'] as $empty_key => $empty_values) {
+            $empty[] = $empty_values['content'];
+          }
+          $empty = implode('\n', $empty);
+        }
+        else {
+          // Views API 2 version of empty
+          $empty = $display->display_options['empty'];
         }
       }
-      $empty = implode('\n', $empty);
       // Items per page.
       $pager = NULL;
-      if (isset($display->display_options['pager']) && is_array($display->display_options['pager'])  && isset($display->display_options['pager']['options']['items_per_page'])) {
-        $pager = $display->display_options['pager']['options']['items_per_page'];
+      // Views API 3.
+      if (isset($display->display_options['pager'])) {
+        if (is_array($display->display_options['pager'])  && isset($display->display_options['pager']['options']['items_per_page'])) {
+          $pager = $display->display_options['pager']['options']['items_per_page'];
+        } 
+      }
+      // Views API 2.
+      elseif (isset($display->display_options['use_pager']) && $display->display_options['use_pager']) {
+        if (isset($display->display_options['use_pager']) && $display->display_options['use_pager'] && isset($display->display_options['items_per_page'])) {
+          $pager = $display->display_options['items_per_page'];
+        }
       }
       // Access rules.
       $access = NULL;
