@@ -797,6 +797,7 @@ function architecture_content_types($requested_types=NULL, $header=FALSE) {
     $content_types[] = array(
       'Name',
       'Machine name',
+      '# of nodes',
       'Module',
       'Title label',
       'Description',
@@ -807,12 +808,14 @@ function architecture_content_types($requested_types=NULL, $header=FALSE) {
     );
   }
   foreach ($types as $type => $details) {
+    $count = db_result(db_query('SELECT COUNT(n.nid) FROM {node} n WHERE n.type=\'%s\'', $type));
     if (!is_array($requested_types) || in_array($type, $requested_types)) {
       $options = variable_get('node_options_' . $type, array('status', 'promote'));
       $comments = (module_exists('comment') && (variable_get('comment_' . $type, COMMENT_NODE_OPEN) == COMMENT_NODE_OPEN)) ? TRUE : FALSE;
       $content_types[$type] = array(
         'name' => $details->name,
         'machine_name' => $details->type,
+        'node_count' => $count,
         'module' => $details->module,
         'title_label' => $details->has_title ? $details->title_label : '',
         'description' => $details->description,
