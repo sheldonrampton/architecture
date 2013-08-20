@@ -11,18 +11,18 @@
  * In addition to HTML reports, it exports data as CSV files. Ultimately this
  * module is intended to provide an automatic export for all of the information
  * components listed in Palantir's Build Spec spreadsheet, as described here:
- * 
+ *
  * http://www.palantir.net/blog/developing-drupal-sites-plan-or-perish
  * https://docs.google.com/a/nuams.co/spreadsheet/ccc?key=0AuIiRK97zQSYdG1EUXNxdDhtVlZBang1N3o1b19IRWc#gid=0
- * 
- * as well as the information components currently available from the 
+ *
+ * as well as the information components currently available from the
  * sitedoc module:
- * 
+ *
  * https://drupal.org/project/sitedoc
  */
 
 /*
-// Comment constand definitions.
+// Comment constant definitions.
 define('COMMENT_NODE_HIDDEN', 0);
 define('COMMENT_NODE_CLOSED', 1);
 define('COMMENT_NODE_OPEN', 2);
@@ -460,7 +460,7 @@ function architecture_views_csv() {
       t('Notes'),
     );
     foreach ($view['displays'] as $display_key => $display) {
-      
+
       $rows['blank_' . $i++] = array(
         '',
         '',
@@ -542,7 +542,7 @@ function architecture_csv_page($filename='results', $array=array(), $omit_key=FA
  *
  * @param Array $requested_taxonomies
  *   A list of taxonomies to be returned.
- * 
+ *
  * @return Array
  *   An associative array of basic information about taxonomies
  *   and their terms.
@@ -553,7 +553,7 @@ function architecture_taxonomies($requested_taxonomies=NULL) {
   $hier = array(t('Disabled'), t('Single'), t('Multiple'));
   $vocabs = array();
   foreach ($vocabularies as $vocab => $vocabulary) {
-    
+
     $vocabs[$vocab] = array(
       'name' => $vocabulary->name,
       'machine_name' => $vocabulary->machine_name,
@@ -624,7 +624,7 @@ function architecture_views($requested_views=NULL) {
       if (isset($display->display_options['pager'])) {
         if (is_array($display->display_options['pager'])  && isset($display->display_options['pager']['options']['items_per_page'])) {
           $pager = $display->display_options['pager']['options']['items_per_page'];
-        } 
+        }
       }
       // Views API 2.
       elseif (isset($display->display_options['use_pager']) && $display->display_options['use_pager']) {
@@ -637,7 +637,7 @@ function architecture_views($requested_views=NULL) {
       if (isset($display->display_options['access']) && is_array($display->display_options['access'])) {
         $access = $display->display_options['access']['type'];
       }
-      
+
       $displays[$display_key] = array(
         'type' => $display->display_plugin,
         'machine_name' => $display_key,
@@ -702,7 +702,7 @@ function architecture_menus() {
         $parent_item = menu_link_load($parent_mlid);
         $parent_title = $parent_item['title'];
       }
-      
+
       $menus[$parent_menu_name]['menu_blocks'][$delta] = array(
         'block_title' => _menu_block_format_title(menu_block_get_config($delta)),
         'title_link' => variable_get("menu_block_{$delta}_title_link", ''),
@@ -751,7 +751,7 @@ function architecture_image_styles() {
  * @param Array $vocabularies
  *   An associative array of basic information about taxonomies
  *   and their terms.
- * 
+ *
  * @return HTML
  *   Formatted HTML.
  */
@@ -778,7 +778,7 @@ function theme_architecture_taxonomies($vocabularies=array()) {
  *
  * @param Array $requested_types
  *   A simple array of content types to be returned.
- * 
+ *
  * @return Array
  *   An associative array of content types and the names of their fields.
  */
@@ -837,7 +837,7 @@ function architecture_content_types($requested_types=NULL, $header=FALSE) {
  *
  * @param Array $requested_types
  *   A simple array of entity types to be returned.
- * 
+ *
  * @return Array
  *   An associative array of entities and detailed information about
  *   their fields.
@@ -879,14 +879,17 @@ function architecture_entity_types($requested_types=NULL) {
  *   The entity type.
  * @param String $bundle_name
  *   The bundle name.
- * 
+ *
  * @return Array
  *   An associative array of detailed information about the fields which belong
  *   to that entity.
  */
 function architecture_entity_bundle_fields($type, $bundle_name) {
   $fields = field_info_instances($type, $bundle_name);
-  $field_groups = field_group_info_groups($type, $bundle_name, 'form');
+  $field_groups = array();
+  if (module_exists('field_group')) {
+    $field_groups = field_group_info_groups($type, $bundle_name, 'form');
+  }
   $fields_list = array();
   foreach ($fields as $name => $particulars) {
     $field_info = field_info_field($name);
@@ -932,7 +935,7 @@ function architecture_entity_bundle_fields($type, $bundle_name) {
  *
  * @param Array $entity_types
  *   An array of entity types.
- * 
+ *
  * @return HTML
  *   A formatted HTML listing.
  */
@@ -966,7 +969,7 @@ function theme_architecture_entity_types($entity_types=array()) {
  *   The machine name of the entity type.
  * @param String $bundle
  *   The machine name of the bundle.
- * 
+ *
  * @return HTML
  *   An unordered HTML list.
  */
@@ -994,7 +997,7 @@ function theme_architecture_fields($fields=array(), $entity_type='', $bundle='')
  *
  * @param Array $content_types
  *   An array of content_types.
- * 
+ *
  * @return HTML
  *   An unordered HTML list.
  */
@@ -1021,10 +1024,10 @@ function theme_architecture_content_types($content_types=array()) {
 
 /**
  * List your site's variables.
- * 
+ *
  * @param Array $requested_variables
  *   An array of variables requested.
- * 
+ *
  * @return Array
  *   A list of site variables.
  */
@@ -1036,10 +1039,10 @@ function architecture_variables($requested_variables=NULL) {
 
 /**
  * Turns an array of site variables into a formatted array.
- * 
+ *
  * @param Array $keys
  *   A simple array of variables requested.
- * 
+ *
  * @return HTML
  *   A data dump of variables and their values.
  */
