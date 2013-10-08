@@ -2,7 +2,30 @@ name = Architecture
 description = "Produces an architectural overview of your Drupal website"
 core = 7.x
 files[] = architecture.module
-version = "7.x-1.x-dev"
+version = "7.x-2.x-dev"
 core = "7.x"
-datestamp = "1323823902"
+dependencies[] = views
 
+; Field handlers
+files[] = views/handlers/topograph_roles_permissions.inc
+files[] = views/handlers/topograph_roles_users.inc
+files[] = views/handlers/topograph_nodetype_menus.inc
+files[] = views/handlers/topograph_nodetype_menu_parent.inc
+files[] = views/handlers/topograph_nodetype_options.inc
+files[] = views/handlers/topograph_nodetype_preview.inc
+files[] = views/handlers/topograph_nodetype_submitted.inc
+files[] = views/handlers/topograph_field_instance_label.inc
+files[] = views/handlers/topograph_field_instance_required.inc
+files[] = views/handlers/topograph_field_instance_description.inc
+files[] = views/handlers/topograph_block_region.inc
+files[] = views/handlers/topograph_block_status.inc
+files[] = views/handlers/topograph_variables_values.inc
+files[] = views/handlers/topograph_taxonomy_nodetypes.inc
+files[] = views/handlers/topograph_raw.inc
+files[] = views/handlers/topograph_php.inc
+files[] = views/handlers/topograph_fields_php.inc
+
+; Plugins
+files[] = views/plugins/topograph_pages_data_query.inc
+files[] = views/plugins/topograph_imagestyles_data_query.inc
+files[] = views/plugins/topograph_views_data_query.inc
