@@ -28,7 +28,7 @@ $ drush phpaudit
 
 or the abbreviated version,
 
-$drush apa
+$ drush apa
 
 to get this information, as attempts to access it via the
 UI may fall over, particularly on sites with a great number of fields.
