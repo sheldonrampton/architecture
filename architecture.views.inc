@@ -1396,6 +1396,9 @@ function architecture_views_data() {
     'title' => t('Fields'),
     'group' => t('Views'),
     'help' => t('The fields of the display'),
+    'field' => array(
+      'handler' => 'views_handler_field',
+    ),
     'sort' => array(
       'handler' => 'views_handler_sort',
     ),
