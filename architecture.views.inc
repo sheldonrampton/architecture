@@ -1392,6 +1392,40 @@ function architecture_views_data() {
       'handler' => 'views_handler_argument_string',
     ),
   );
+  $data['views']['view_query'] = array(
+    'title' => t('Query'),
+    'group' => t('Views'),
+    'help' => t('The query run by the view'),
+    'field' => array(
+      'handler' => 'architecture_query_views_handler',
+    ),
+    'sort' => array(
+      'handler' => 'views_handler_sort',
+    ),
+    'filter' => array(
+      'handler' => 'views_handler_filter_string',
+    ),
+    'argument' => array(
+      'handler' => 'views_handler_argument_string',
+    ),
+  );
+  $data['views']['path'] = array(
+    'title' => t('path'),
+    'group' => t('Views'),
+    'help' => t('The path of the view'),
+    'field' => array(
+      'handler' => 'views_handler_field',
+    ),
+    'sort' => array(
+      'handler' => 'views_handler_sort',
+    ),
+    'filter' => array(
+      'handler' => 'views_handler_filter_string',
+    ),
+    'argument' => array(
+      'handler' => 'views_handler_argument_string',
+    ),
+  );
   $data['views']['fields'] = array(
     'title' => t('Fields'),
     'group' => t('Views'),

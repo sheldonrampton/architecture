@@ -181,10 +181,21 @@ $handler->display->display_options['fields']['storage']['id'] = 'storage';
 $handler->display->display_options['fields']['storage']['table'] = 'views';
 $handler->display->display_options['fields']['storage']['field'] = 'storage';
 $handler->display->display_options['fields']['storage']['exclude'] = TRUE;
+/* Field: Views: Path */
+$handler->display->display_options['fields']['path']['id'] = 'path';
+$handler->display->display_options['fields']['path']['table'] = 'views';
+$handler->display->display_options['fields']['path']['field'] = 'path';
+$handler->display->display_options['fields']['path']['exclude'] = FALSE;
+/* Field: Views: query */
+$handler->display->display_options['fields']['view_query']['id'] = 'view_query';
+$handler->display->display_options['fields']['view_query']['table'] = 'views';
+$handler->display->display_options['fields']['view_query']['field'] = 'view_query';
+$handler->display->display_options['fields']['view_query']['exclude'] = FALSE;
 /* Field: Views: Fields */
 $handler->display->display_options['fields']['fields']['id'] = 'fields';
 $handler->display->display_options['fields']['fields']['table'] = 'views';
 $handler->display->display_options['fields']['fields']['field'] = 'fields';
+
 $handler->display->display_options['path'] = 'admin/reports/architecture/views';
 $handler->display->display_options['menu']['type'] = 'tab';
 $handler->display->display_options['menu']['title'] = 'Views';
