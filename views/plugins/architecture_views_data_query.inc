@@ -20,7 +20,16 @@ class architecture_views_data_plugin_query extends views_plugin_query {
    * Reproducing add_field() here so the spaghetti doesn't stick together.
    */
   function add_field($table, $field, $alias = '', $params = array()) {
-    $alias = views_plugin_query_default::add_field($table, $field, $alias = '', $params = array());
+    // Have to instantiate the thing to call its static method.
+    $views_query_plugin_default = new views_plugin_query_default();
+
+    // I don't know what this does, but it complains if these aren't set.
+    $views_query_plugin_default->base_table = $table;
+    $views_query_plugin_default->base_field = $field;
+
+    // This is the actual thing that needs to get done.
+    $alias = $views_query_plugin_default->add_field($table, $field, $alias = '', $params = array());
+
     return $alias;
   }
 
