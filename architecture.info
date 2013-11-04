@@ -22,6 +22,7 @@ files[] = views/handlers/architecture_block_status.inc
 files[] = views/handlers/architecture_variables_values.inc
 files[] = views/handlers/architecture_taxonomy_nodetypes.inc
 files[] = views/handlers/architecture_raw.inc
+files[] = views/handlers/architecture_view_query.inc
 files[] = views/handlers/architecture_php.inc
 files[] = views/handlers/architecture_fields_php.inc
 
