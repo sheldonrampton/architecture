@@ -32,9 +32,7 @@ function architecture_drush_help($section) {
  * Gets and formats the data.
  */
 function drush_architecture_phpaudit() {
-  $field_info = _architecture_list_fields();
-  drush_print_table($field_info['rows'], TRUE);
-  drush_print_pipe($field_info['pipe']);
+  _architecture_batch_process_fields();
 }
 
 /**
@@ -45,31 +43,33 @@ function drush_architecture_phpaudit() {
  *   one for drush_print_table()
  *   one for drush_print_pipe()
  */
-function _architecture_list_fields() {
-  $rows[] = array(
-    dt('Field name'),
-    dt('Field type'),
-    dt('Bundles'),
-    dt('Occurrences of PHP in field'),
-  );
-  $info = field_info_fields();
-  foreach ($info as $field_name => $field) {
-    $bundle_strs = array();
-    $php_audit_strs = array();
-    foreach ($field['bundles'] as $entity_type => $bundles) {
-      $bundle_strs[] = implode(',', $bundles);
-      $php_audit_strs[] = _architecture_scour_fields($field_name . '_value', 'field_data_' . $field_name, '<?php');
-    }
-    $row = array(
-      $field_name,
-      $field['type'],
-      implode(' ', $bundle_strs),
-      implode(' ', $php_audit_strs),
+function _architecture_list_fields($field) {
+
+  if($field['count'] == 1) {
+    $rows[] = array(
+      dt('Occurrences of PHP in field'),
+      dt('Bundles'),
+      dt('Field name'),
+      dt('Field type'),
     );
-    $rows[] = $row;
-    $pipe[] = implode(',', $row);
   }
-  return array('rows' => $rows, 'pipe' => $pipe);
+
+  $field_name = $field['name'];
+  $bundle_strs = array();
+  foreach ($field['bundles'] as $entity_type => $bundles) {
+    $bundle_strs[] = implode(', ', $bundles);
+  }
+  $php_audit_str = _architecture_scour_fields($field_name . '_value', 'field_data_' . $field_name, '<?php');
+  $row = array(
+    $php_audit_str,
+    implode(' ', $bundle_strs),
+    $field_name,
+    $field['type'],
+  );
+  $rows[] = $row;
+  $pipe[] = implode(',', $row);
+  drush_print_table($rows, TRUE, array(30, 35, 40, 20));
+  drush_print_pipe($pipe);
 }
 
 /**
@@ -107,6 +107,39 @@ function _architecture_scour_fields($column, $table, $needle) {
   }
   catch (Exception $e) {
     // If the field is a weird type, the query'll fail. No big.
-    return 'Could not evaluate field.';
+    return 'Could not find field contents.';
   }
+}
+
+function _architecture_batch_process_fields() {
+  $fields = field_info_field_map();
+  $operations = array();
+  $count = count($names);
+
+  //for every chunk, assign some method to run on that chunk of data
+  foreach ($fields as $name => $field) {
+    $i++;
+    $field['name'] = $name;
+    $field['count'] = $i;
+    $operations[] = array("_architecture_list_fields", array($field,'details'=> t('(Scouring field @field  of  @count)', array('@field '=>$i, '@count'=>$count))));
+  }
+
+  //put all that information into our batch array
+  $batch = array(
+    'operations' => $operations,
+    'title' => t('Scour fields'),
+    'init_message' => t('Starting'),
+    'error_message' => t('An error occurred'),
+    //'finished' => 'mymodule_finished_method'
+  );
+
+  //Get the batch process all ready!
+  batch_set($batch);
+  $batch =& batch_get();
+
+  //Because we are doing this on the back-end, we set progressive to false.
+  $batch['progressive'] = TRUE;
+
+  //Start processing the batch operations.
+  drush_backend_batch_process();
 }
