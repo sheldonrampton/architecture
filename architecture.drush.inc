@@ -29,7 +29,7 @@ function architecture_drush_help($section) {
 }
 
 /**
- *
+ * Gets and formats the data.
  */
 function drush_architecture_phpaudit() {
   $field_info = _architecture_list_fields();
@@ -37,6 +37,14 @@ function drush_architecture_phpaudit() {
   drush_print_pipe($field_info['pipe']);
 }
 
+/**
+ * Creates a table of data on the command line.
+ *
+ * @return array
+ *  Array of two arrays:
+ *   one for drush_print_table()
+ *   one for drush_print_pipe()
+ */
 function _architecture_list_fields() {
   $rows[] = array(
     dt('Field name'),
@@ -64,6 +72,18 @@ function _architecture_list_fields() {
   return array('rows' => $rows, 'pipe' => $pipe);
 }
 
+/**
+ * Queries each field's data table, parses through results for the $needle.
+ *
+ * @param string $column
+ *  Name of the column with the values ("[field_name]_value" for most).
+ * @param string $table
+ *  Name of the table to query. ("field_data_[field_name]" for most).
+ * @param string $needle
+ *  The value to search for. E.g. "<?php" to find php opening tags.
+ * @return string
+ *  Short summary of what was found.
+ */
 function _architecture_scour_fields($column, $table, $needle) {
   // @todo: add some kind of sql injection protection here.
   // I'm not super worried because a user would have to somehow sneak their
